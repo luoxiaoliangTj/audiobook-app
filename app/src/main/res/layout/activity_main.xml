@@ -9,49 +9,21 @@
     android:padding="16dp"
     tools:context=".MainActivity">
 
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Audiobook Reader"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:layout_marginBottom="24dp"/>
-
     <Button
-        android:id="@+id/btnBrowse"
+        android:id="@+id/speakButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Browse for PDF/EPUB Files"
+        android:text="Speak"
         android:backgroundTint="#2196F3"
         android:textColor="@android:color/white"
-        android:layout_marginBottom="16dp"/>
-
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Tap 'Browse' to select a PDF or EPUB file"
-        android:textSize="16sp"
-        android:gravity="center"
         android:layout_marginBottom="24dp"/>
 
-    <ImageView
-        android:id="@+id/ivIcon"
-        android:layout_width="100dp"
-        android:layout_height="100dp"
-        android:layout_gravity="center_horizontal"
-        android:src="@drawable/ic_audiobook"
-        android:contentDescription="Audiobook icon"/>
-
     <TextView
+        android:id="@+id/textView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Supported formats: PDF, EPUB"
-        android:textSize="14sp"
-        android:textColor="#666"
-        android:gravity="center"
-        android:layout_marginTop="16dp"/>
+        android:text="Hello World!"
+        android:textSize="18sp"
+        android:gravity="center"/>
 
 </LinearLayout>
