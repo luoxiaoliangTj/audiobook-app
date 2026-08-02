@@ -49,6 +49,15 @@ dependencies {
     implementation "androidx.appcompat:appcompat:1.4.1"
     implementation "com.google.android.material:material:1.5.0"
     implementation "androidx.constraintlayout:constraintlayout:2.1.3"
+    // PDF text extraction via PdfiumAndroid (Maven Central)
+    implementation 'com.github.barteksc:pdfium-android:1.9.0'
+    // EPUB library from com.positiondev.epublib (Maven Central)
+    // Exclude xmlpull to avoid conflict with kxml2
+    implementation ('com.positiondev.epublib:epublib-core:3.1') {
+        exclude group: 'xmlpull', module: 'xmlpull'
+    }
+    // kxml2 for XML parsing (required by epublib)
+    implementation 'net.sf.kxml:kxml2:2.3.0'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'

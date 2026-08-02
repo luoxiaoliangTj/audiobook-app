@@ -1,3 +1,0 @@
-/home/lxl/audiobook-app/app/src/main/java/com/example/audiobookapp/ReaderActivity.kt
-/home/lxl/audiobook-app/app/src/main/java/com/example/audiobookapp/FilePickerActivity.kt
-/home/lxl/audiobook-app/app/src/main/java/com/example/audiobookapp/MainActivity.kt

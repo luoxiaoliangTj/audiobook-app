@@ -56,6 +56,27 @@
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
   <library
+      name="com.github.barteksc:pdfium-android:1.9.0@aar"
+      jars="/home/lxl/.gradle/caches/transforms-3/d9ce74531394a38a7489e2926d3bf90b/transformed/jetified-pdfium-android-1.9.0/jars/classes.jar"
+      resolved="com.github.barteksc:pdfium-android:1.9.0"
+      folder="/home/lxl/.gradle/caches/transforms-3/d9ce74531394a38a7489e2926d3bf90b/transformed/jetified-pdfium-android-1.9.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="com.positiondev.epublib:epublib-core:3.1@jar"
+      jars="/home/lxl/.gradle/caches/modules-2/files-2.1/com.positiondev.epublib/epublib-core/3.1/73b6903e758fc51a1226b44f6cf015df3bff5d1f/epublib-core-3.1.jar"
+      resolved="com.positiondev.epublib:epublib-core:3.1"/>
+  <library
+      name="net.sf.kxml:kxml2:2.3.0@jar"
+      jars="/home/lxl/.gradle/caches/modules-2/files-2.1/net.sf.kxml/kxml2/2.3.0/ccbc77a5fd907ef863c29f3596c6f54ffa4e9442/kxml2-2.3.0.jar"
+      resolved="net.sf.kxml:kxml2:2.3.0"/>
+  <library
       name="org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.5.31@jar"
       jars="/home/lxl/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk7/1.5.31/77e0f2568912e45d26c31fd417a332458508acdf/kotlin-stdlib-jdk7-1.5.31.jar"
       resolved="org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.5.31"/>
@@ -491,6 +512,27 @@
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
   <library
+      name="org.slf4j:slf4j-simple:1.6.1@jar"
+      jars="/home/lxl/.gradle/caches/modules-2/files-2.1/org.slf4j/slf4j-simple/1.6.1/58e59bfb3e247097b8122243b3bfe0049c8cfae8/slf4j-simple-1.6.1.jar"
+      resolved="org.slf4j:slf4j-simple:1.6.1"/>
+  <library
+      name="org.slf4j:slf4j-api:1.6.1@jar"
+      jars="/home/lxl/.gradle/caches/modules-2/files-2.1/org.slf4j/slf4j-api/1.6.1/6f3b8a24bf970f17289b234284c94f43eb42f0e4/slf4j-api-1.6.1.jar"
+      resolved="org.slf4j:slf4j-api:1.6.1"/>
+  <library
+      name="androidx.legacy:legacy-support-v4:1.0.0@aar"
+      jars="/home/lxl/.gradle/caches/transforms-3/7fb7c5e0705585b3f1381e3450166cf3/transformed/legacy-support-v4-1.0.0/jars/classes.jar"
+      resolved="androidx.legacy:legacy-support-v4:1.0.0"
+      folder="/home/lxl/.gradle/caches/transforms-3/7fb7c5e0705585b3f1381e3450166cf3/transformed/legacy-support-v4-1.0.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
       name="androidx.emoji2:emoji2-views-helper:1.0.0@aar"
       jars="/home/lxl/.gradle/caches/transforms-3/aa43e1cff447c3cae782e0c219397888/transformed/jetified-emoji2-views-helper-1.0.0/jars/classes.jar"
       resolved="androidx.emoji2:emoji2-views-helper:1.0.0"
@@ -508,6 +550,71 @@
       jars="/home/lxl/.gradle/caches/transforms-3/e5f3204ed666cf6cbbd0d89709d75173/transformed/jetified-emoji2-1.0.0/jars/classes.jar:/home/lxl/.gradle/caches/transforms-3/e5f3204ed666cf6cbbd0d89709d75173/transformed/jetified-emoji2-1.0.0/jars/libs/repackaged.jar"
       resolved="androidx.emoji2:emoji2:1.0.0"
       folder="/home/lxl/.gradle/caches/transforms-3/e5f3204ed666cf6cbbd0d89709d75173/transformed/jetified-emoji2-1.0.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.legacy:legacy-support-core-ui:1.0.0@aar"
+      jars="/home/lxl/.gradle/caches/transforms-3/4d0b56494d61869d7b119e7fcd203df1/transformed/legacy-support-core-ui-1.0.0/jars/classes.jar"
+      resolved="androidx.legacy:legacy-support-core-ui:1.0.0"
+      folder="/home/lxl/.gradle/caches/transforms-3/4d0b56494d61869d7b119e7fcd203df1/transformed/legacy-support-core-ui-1.0.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.slidingpanelayout:slidingpanelayout:1.0.0@aar"
+      jars="/home/lxl/.gradle/caches/transforms-3/9b1f27a8114233f3c81a188b171d963d/transformed/slidingpanelayout-1.0.0/jars/classes.jar"
+      resolved="androidx.slidingpanelayout:slidingpanelayout:1.0.0"
+      folder="/home/lxl/.gradle/caches/transforms-3/9b1f27a8114233f3c81a188b171d963d/transformed/slidingpanelayout-1.0.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.media:media:1.0.0@aar"
+      jars="/home/lxl/.gradle/caches/transforms-3/20452460b235ef085ced670cd391a5cd/transformed/media-1.0.0/jars/classes.jar"
+      resolved="androidx.media:media:1.0.0"
+      folder="/home/lxl/.gradle/caches/transforms-3/20452460b235ef085ced670cd391a5cd/transformed/media-1.0.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.swiperefreshlayout:swiperefreshlayout:1.0.0@aar"
+      jars="/home/lxl/.gradle/caches/transforms-3/19e3090883ac970751f9ba376e5d22a9/transformed/swiperefreshlayout-1.0.0/jars/classes.jar"
+      resolved="androidx.swiperefreshlayout:swiperefreshlayout:1.0.0"
+      folder="/home/lxl/.gradle/caches/transforms-3/19e3090883ac970751f9ba376e5d22a9/transformed/swiperefreshlayout-1.0.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.asynclayoutinflater:asynclayoutinflater:1.0.0@aar"
+      jars="/home/lxl/.gradle/caches/transforms-3/2ac7c10dc78dfe46e611add66ea590d5/transformed/asynclayoutinflater-1.0.0/jars/classes.jar"
+      resolved="androidx.asynclayoutinflater:asynclayoutinflater:1.0.0"
+      folder="/home/lxl/.gradle/caches/transforms-3/2ac7c10dc78dfe46e611add66ea590d5/transformed/asynclayoutinflater-1.0.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"

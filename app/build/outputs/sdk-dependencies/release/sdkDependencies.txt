@@ -643,6 +643,143 @@ library {
   repo_index {
   }
 }
+library {
+  maven_library {
+    groupId: "com.github.barteksc"
+    artifactId: "pdfium-android"
+    version: "1.9.0"
+  }
+  digests {
+    sha256: ")\222\350l\316\232\325Wn\234G\251\234\302\272\214\267Ww\001iD\2550\373\355={\217l\257?"
+  }
+  repo_index {
+    value: 1
+  }
+}
+library {
+  maven_library {
+    groupId: "androidx.legacy"
+    artifactId: "legacy-support-v4"
+    version: "1.0.0"
+  }
+  digests {
+    sha256: "x\376\301H_\0178\212GI\002-\325\024\026\205q\'\315%D\256\034?\320\261e\211\005T\200\260"
+  }
+  repo_index {
+  }
+}
+library {
+  maven_library {
+    groupId: "androidx.media"
+    artifactId: "media"
+    version: "1.0.0"
+  }
+  digests {
+    sha256: "\262;R{+\254\207\fJtQ\346\230-q2\344\023\350\215\177\'\333\353\037\307d\nr\f\331\356"
+  }
+  repo_index {
+  }
+}
+library {
+  maven_library {
+    groupId: "androidx.legacy"
+    artifactId: "legacy-support-core-ui"
+    version: "1.0.0"
+  }
+  digests {
+    sha256: "\r\022`\306\347\346\2437\370u\337q\265\026\223\036p?qn\220\210\230\027\315: \372Z\303\331G"
+  }
+  repo_index {
+  }
+}
+library {
+  maven_library {
+    groupId: "androidx.slidingpanelayout"
+    artifactId: "slidingpanelayout"
+    version: "1.0.0"
+  }
+  digests {
+    sha256: "v\277\373|\357\277x\a\224\330\201p\002\332\321V/>\'\300\251\367F\326$\001\310\355\263\n\356\336"
+  }
+  repo_index {
+  }
+}
+library {
+  maven_library {
+    groupId: "androidx.swiperefreshlayout"
+    artifactId: "swiperefreshlayout"
+    version: "1.0.0"
+  }
+  digests {
+    sha256: "\227a\263\250\t\311\260\223\375\006\243\304\273\306Eum\354\016\225\265\311\332A\233\311\362\243\363\002n\215"
+  }
+  repo_index {
+  }
+}
+library {
+  maven_library {
+    groupId: "androidx.asynclayoutinflater"
+    artifactId: "asynclayoutinflater"
+    version: "1.0.0"
+  }
+  digests {
+    sha256: "\367\352\266\fW\255\335\224\273\006\'X2\376v\000a\033\352\252\341\241\354Y|#\031V\372\371l\213"
+  }
+  repo_index {
+  }
+}
+library {
+  maven_library {
+    groupId: "com.positiondev.epublib"
+    artifactId: "epublib-core"
+    version: "3.1"
+  }
+  digests {
+    sha256: "\236\327\347U\2614i\315\332\222\366k\216\230H\274@\277\240\270D9p\311\235n\025\033M\357\305A"
+  }
+  repo_index {
+    value: 1
+  }
+}
+library {
+  maven_library {
+    groupId: "net.sf.kxml"
+    artifactId: "kxml2"
+    version: "2.3.0"
+  }
+  digests {
+    sha256: "\362d\335\237y\241\375\341\f\345\354\3052!\357\362K\344\3113\034\203\v}R\362\360\212{c=\342"
+  }
+  repo_index {
+    value: 1
+  }
+}
+library {
+  maven_library {
+    groupId: "org.slf4j"
+    artifactId: "slf4j-api"
+    version: "1.6.1"
+  }
+  digests {
+    sha256: "\330I\321\027\3747\230\203\214l\324-\266\247\354\366\331\256\005\f9\227A{\216N%\036Y+\035>"
+  }
+  repo_index {
+    value: 1
+  }
+}
+library {
+  maven_library {
+    groupId: "org.slf4j"
+    artifactId: "slf4j-simple"
+    version: "1.6.1"
+  }
+  digests {
+    sha256: "\024\306\351\275\377q\257\037\267\005O\223&\025\234\352\213\265\301\353#\201Y\027\234\251\021\024\234\023\216\035"
+  }
+  repo_index {
+    value: 1
+  }
+}
 library_dependencies {
   library_dep_index: 1
   library_dep_index: 4
@@ -944,6 +1081,66 @@ library_dependencies {
   library_dep_index: 7
   library_dep_index: 14
 }
+library_dependencies {
+  library_index: 53
+  library_dep_index: 54
+}
+library_dependencies {
+  library_index: 54
+  library_dep_index: 7
+  library_dep_index: 55
+  library_dep_index: 46
+  library_dep_index: 56
+  library_dep_index: 25
+}
+library_dependencies {
+  library_index: 55
+  library_dep_index: 6
+  library_dep_index: 7
+  library_dep_index: 13
+}
+library_dependencies {
+  library_index: 56
+  library_dep_index: 6
+  library_dep_index: 7
+  library_dep_index: 46
+  library_dep_index: 27
+  library_dep_index: 26
+  library_dep_index: 42
+  library_dep_index: 34
+  library_dep_index: 57
+  library_dep_index: 33
+  library_dep_index: 58
+  library_dep_index: 59
+  library_dep_index: 18
+}
+library_dependencies {
+  library_index: 57
+  library_dep_index: 6
+  library_dep_index: 7
+  library_dep_index: 27
+}
+library_dependencies {
+  library_index: 58
+  library_dep_index: 6
+  library_dep_index: 7
+  library_dep_index: 33
+}
+library_dependencies {
+  library_index: 59
+  library_dep_index: 6
+  library_dep_index: 7
+}
+library_dependencies {
+  library_index: 60
+  library_dep_index: 61
+  library_dep_index: 62
+  library_dep_index: 63
+}
+library_dependencies {
+  library_index: 63
+  library_dep_index: 62
+}
 module_dependencies {
   module_name: "base"
   dependency_index: 0
@@ -951,6 +1148,9 @@ module_dependencies {
   dependency_index: 17
   dependency_index: 40
   dependency_index: 43
+  dependency_index: 53
+  dependency_index: 60
+  dependency_index: 61
 }
 repositories {
   maven_repo {
@@ -960,5 +1160,20 @@ repositories {
 repositories {
   maven_repo {
     url: "https://repo.maven.apache.org/maven2/"
+  }
+}
+repositories {
+  maven_repo {
+    url: "https://jitpack.io"
+  }
+}
+repositories {
+  maven_repo {
+    url: "https://oss.sonatype.org/content/repositories/releases/"
+  }
+}
+repositories {
+  maven_repo {
+    url: "https://oss.sonatype.org/content/repositories/snapshots/"
   }
 }

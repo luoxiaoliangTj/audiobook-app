@@ -9,20 +9,28 @@
     tools:context=".MainActivity">
 
     <Button
-        android:id="@+id/buttonPickAudio"
+        android:id="@+id/btnPickFile"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Pick Audio File" />
+        android:text="Select File" />
 
     <Button
-        android:id="@+id/buttonPlay"
+        android:id="@+id/btnPlayPause"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Play"
-        android:enabled="false" />
+        android:text="Play/Pause" />
 
     <TextView
-        android:id="@+id/textViewStatus"
+        android:id="@+id/tvFileName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No file selected"
+        android:padding="8dp"
+        android:textColor="@android:color/black"
+        android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/tvStatus"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -30,6 +38,6 @@
         android:padding="8dp"
         android:textColor="@android:color/white"
         android:textSize="16sp"
-        android:text="No file selected" />
+        android:text="Select a PDF file to begin" />
 
 </LinearLayout>

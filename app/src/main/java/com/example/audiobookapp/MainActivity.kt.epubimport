@@ -1,0 +1,274 @@
+package com.example.audiobookapp
+
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.ActivityResultCallback
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import java.io.BufferedReader
+import java.io.File
+import java.io.FileInputStream
+import java.io.InputStreamReader
+import java.io.IOException
+import java.util.Locale
+// PDF imports
+import com.github.barteksc.pdfviewer.PDFView
+import com.github.barteksc.pdfviewer.listener.OnLoadCompleteListener
+import com.github.barteksc.pdfviewer.listener.OnPageChangeListener
+import com.github.barteksc.pdfviewer.scroll.DefaultScrollHandle
+import com.shockwave.pdfium.PdfDocument
+// EPUB imports
+import com.positiondev.epublib.domain.Book
+import com.positiondev.epublib.epub.EpubReader
+
+class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
+
+    private lateinit var tts: TextToSpeech
+    private lateinit var btnPickFile: Button
+    private lateinit var btnPlayPause: Button
+    private lateinit var tvFileName: TextView
+    private lateinit var tvStatus: TextView
+    private lateinit var pdfView: PDFView
+    private lateinit var epubText: StringBuilder
+
+    private var fileUri: Uri? = null
+    private var isPlaying = false
+    private var currentPosition = 0
+    private var textToSpeak: String = ""
+    private var isPdf = false
+    private var isEpub = false
+
+    // ActivityResultLauncher for file picking
+    private val pickFileLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            fileUri = it
+            tvFileName.text = "Selected: ${getFileName(uri)}"
+            tvStatus.text = "Processing file..."
+            // Determine file type and process accordingly
+            when {
+                uri.toString().endsWith(".pdf", ignoreCase = true) -> {
+                    isPdf = true
+                    isEpub = false
+                    processPdf(uri)
+                }
+                uri.toString().endsWith(".epub", ignoreCase = true) -> {
+                    isPdf = false
+                    isEpub = true
+                    processEpub(uri)
+                }
+                else -> {
+                    // Assume text file
+                    isPdf = false
+                    isEpub = false
+                    processTextFile(uri)
+                }
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        // Initialize views
+        btnPickFile = findViewById(R.id.btnPickFile)
+        btnPlayPause = findViewById(R.id.btnPlayPause)
+        tvFileName = findViewById(R.id.tvFileName)
+        tvStatus = findViewById(R.id.tvStatus)
+        pdfView = findViewById(R.id.pdfView)
+
+        // Initialize TextToSpeech
+        tts = TextToSpeech(this, this)
+
+        // Set button click listeners
+        btnPickFile.setOnClickListener {
+            pickFileLauncher.launch("*/*")
+        }
+
+        btnPlayPause.setOnClickListener {
+            if (isPlaying) {
+                pauseSpeech()
+            } else {
+                if (textToSpeak.isNotEmpty()) {
+                    resumeSpeech()
+                } else {
+                    Toast.makeText(this, "Please select a file first", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = tts.setLanguage(Locale.US)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                toast("Language not supported")
+            }
+        } else {
+            toast("TTS Initialization failed")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun speakText(text: String) {
+        tvStatus.text = "Speaking..."
+        isPlaying = true
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utterance")
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun pauseSpeech() {
+        tts.stop()
+        isPlaying = false
+        tvStatus.text = "Paused"
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun resumeSpeech() {
+        tts.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, null, "utterance")
+        tvStatus.text = "Speaking..."
+        isPlaying = true
+    }
+
+    private fun processTextFile(uri: Uri) {
+        Thread {
+            try {
+                val input: InputStreamReader = ContentResolver.openInputStream(uri)?.let { InputStreamReader(it) } ?: return@Thread
+                val bufferedReader = BufferedReader(input)
+                val stringBuilder = StringBuilder()
+                var line: String?
+                while (bufferedReader.readLine().also { line = it } != null) {
+                    stringBuilder.append(line)
+                    stringBuilder.append('\n')
+                }
+                textToSpeak = stringBuilder.toString()
+                runOnUiThread {
+                    tvStatus.text = "Text file loaded. Ready to play."
+                    if (textToSpeak.isNotEmpty()) {
+                        btnPlayPause.isEnabled = true
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                runOnUiThread {
+                    tvStatus.text = "Error reading text file: ${e.localizedMessage}"
+                }
+            }
+        }.start()
+    }
+
+    private fun processPdf(uri: Uri) {
+        Thread {
+            try {
+                val inputStream: java.io.InputStream? = ContentResolver.openInputStream(uri)
+                inputStream?.use { stream ->
+                    val pdfDocument = PdfDocument.load(stream)
+                    val pageCount = pageCount(pdfDocument)
+                    val textBuilder = StringBuilder()
+                    for (pageIndex in 0 until pageCount) {
+                        val page = pdfDocument.getPage(pageIndex)
+                        val text = textFromPage(page)
+                        textBuilder.append(text)
+                        textBuilder.append("\n\n")
+                        page.close()
+                    }
+                    pdfDocument.close()
+                    textToSpeak = textBuilder.toString()
+                    runOnUiThread {
+                        tvStatus.text = "PDF loaded. Ready to play."
+                        if (textToSpeak.isNotEmpty()) {
+                            btnPlayPause.isEnabled = true
+                        }
+                    }
+                } ?: run {
+                    runOnUiThread {
+                        tvStatus.text = "Could not open PDF file"
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                runOnUiThread {
+                    tvStatus.text = "Error processing PDF: ${e.localizedMessage}"
+                }
+            }
+        }.start()
+    }
+
+    private fun processEpub(uri: Uri) {
+        Thread {
+            try {
+                val inputStream: java.io.InputStream? = ContentResolver.openInputStream(uri)
+                inputStream?.use { stream ->
+                    val epubReader = EpubReader()
+                    val book: Book = epubReader.read(stream)
+                    val textBuilder = StringBuilder()
+                    // Extract text from each chapter
+                    val resources = book.getResources()
+                    resources?.filter { it.getMediaType().contains("text") }?.forEach { resource ->
+                        val content = resource.getData()
+                        val text = String(content, charset("UTF-8"))
+                        // Simple HTML tag removal (basic)
+                        val plainText = text.replace(Regex("<[^>]+>"), "")
+                            .replace(Regex("\\s+"), " ")
+                            .trim()
+                        textBuilder.append(plainText)
+                        textBuilder.append("\n\n")
+                    }
+                    textToSpeak = textBuilder.toString()
+                    runOnUiThread {
+                        tvStatus.text = "EPUB loaded. Ready to play."
+                        if (textToSpeak.isNotEmpty()) {
+                            btnPlayPause.isEnabled = true
+                        }
+                    }
+                } ?: run {
+                    runOnUiThread {
+                        tvStatus.text = "Could not open EPUB file"
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                runOnUiThread {
+                    tvStatus.text = "Error processing EPUB: ${e.localizedMessage}"
+                }
+            }
+        }.start()
+    }
+
+    private fun getFileName(uri: Uri): String {
+        return uri.lastPathSegment ?: "Unknown"
+    }
+
+    // Helper functions for PDF text extraction (simplified)
+    private fun pageCount(document: PdfDocument): Int {
+        return document.getCatalogue().getPages().size()
+    }
+
+    private fun textFromPage(page: com.shockwave.pdfium.PdfDocument.Page): String {
+        val textPage = page.textPage()
+        val textLen = textPage.countChars()
+        val charArray = CharArray(textLen)
+        textPage.getText(charArray, 0, textLen)
+        textPage.close()
+        return String(charArray)
+    }
+
+    override fun onDestroy() {
+        tts.shutdown()
+        super.onDestroy()
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+}
