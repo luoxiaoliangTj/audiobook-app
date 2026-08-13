@@ -1,0 +1,120 @@
+package com.example.audiobook
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Bundle
+import android.view.View
+import android.widget.Button
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import java.io.InputStream
+
+class MainActivity : AppCompatActivity() {
+
+    private var selectedFileUri: Uri? = null
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            openFilePicker()
+        } else {
+            Toast.makeText(this, "需要存储权限", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            selectedFileUri = uri
+            loadAndSpeakFile(uri)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        setupViews()
+        checkPermissions()
+    }
+
+    private fun setupViews() {
+        val btnSelectFile = findViewById<Button>(R.id.btnSelectFile)
+        val btnPlay = findViewById<Button>(R.id.btnPlay)
+        val btnPause = findViewById<Button>(R.id.btnPause)
+        val tvFileName = findViewById<TextView>(R.id.tvFileName)
+        val progressBar = findViewById<ProgressBar>(R.id.progressBar)
+
+        btnSelectFile.setOnClickListener {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                openFilePicker()
+            } else {
+                requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+
+        btnPlay.setOnClickListener {
+            val intent = Intent(this, TtsService::class.java).apply {
+                action = TtsService.ACTION_PLAY
+            }
+            startService(intent)
+        }
+
+        btnPause.setOnClickListener {
+            val intent = Intent(this, TtsService::class.java).apply {
+                action = TtsService.ACTION_STOP
+            }
+            startService(intent)
+        }
+    }
+
+    private fun checkPermissions() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    private fun openFilePicker() {
+        filePickerLauncher.launch("*/*")
+    }
+
+    private fun loadAndSpeakFile(uri: Uri) {
+        findViewById<ProgressBar>(R.id.progressBar).visibility = View.VISIBLE
+        findViewById<TextView>(R.id.tvFileName).text = uri.lastPathSegment ?: "未选择文件"
+        
+        try {
+            val inputStream: InputStream = contentResolver.openInputStream(uri) ?: return
+            val text = inputStream.bufferedReader().use { it.readText() }
+            
+            val intent = Intent(this, TtsService::class.java).apply {
+                action = TtsService.ACTION_LOAD
+                putExtra(TtsService.EXTRA_TEXT, text)
+            }
+            startService(intent)
+            
+            findViewById<View>(R.id.btnPlay).visibility = View.VISIBLE
+            findViewById<View>(R.id.btnPause).visibility = View.VISIBLE
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法读取文件: ${e.message}", Toast.LENGTH_LONG).show()
+        } finally {
+            findViewById<ProgressBar>(R.id.progressBar).visibility = View.GONE
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopService(Intent(this, TtsService::class.java))
+    }
+}

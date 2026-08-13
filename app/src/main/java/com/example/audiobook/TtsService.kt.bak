@@ -1,0 +1,123 @@
+package com.example.audiobook
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+import android.speech.tts.TextToSpeech
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import java.util.Locale
+
+class TtsService : Service(), TextToSpeech.OnInitListener {
+
+    companion object {
+        const val TAG = "TtsService"
+        const val CHANNEL_ID = "tts_service_channel"
+        const val NOTIFICATION_ID = 1001
+
+        const val ACTION_LOAD = "com.example.audiobook.LOAD"
+        const val EXTRA_TEXT = "text"
+
+        const val ACTION_PLAY = "com.example.audiobook.PLAY"
+        const val ACTION_STOP = "com.example.audiobook.STOP"
+    }
+
+    private var tts: TextToSpeech? = null
+    private var currentText: String = ""
+    private var isPlaying = false
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+        initTts()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "TTS Playback",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Audio book playback"
+            }
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+    }
+
+    private fun initTts() {
+        tts = TextToSpeech(this, this)
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = tts?.setLanguage(Locale.US)
+            if (result == null || result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.e(TAG, "TTS language not supported")
+            }
+            tts?.setSpeechRate(1.0f)
+        } else {
+            Log.e(TAG, "TTS initialization failed")
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_LOAD -> {
+                currentText = intent.getStringExtra(EXTRA_TEXT) ?: ""
+                startForeground(NOTIFICATION_ID, createNotification())
+                Log.d(TAG, "Loaded ${currentText.length} characters")
+            }
+            ACTION_PLAY -> startSpeaking()
+            ACTION_STOP -> stopSpeaking()
+        }
+        return START_STICKY
+    }
+
+    fun startSpeaking() {
+        if (currentText.isEmpty()) return
+        tts?.speak(currentText, TextToSpeech.QUEUE_FLUSH, null, "id1")
+        isPlaying = true
+        updateNotification()
+    }
+
+    fun stopSpeaking() {
+        tts?.stop()
+        isPlaying = false
+        updateNotification()
+    }
+
+    private fun createNotification(): Notification {
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("听书阅读器")
+            .setContentText(if (currentText.length > 50) currentText.substring(0, 50) + "..." else currentText)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .build()
+    }
+
+    private fun updateNotification() {
+        val notification = createNotification()
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        super.onDestroy()
+        tts?.stop()
+        tts?.shutdown()
+    }
+}
