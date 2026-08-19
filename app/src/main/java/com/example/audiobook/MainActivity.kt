@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -31,7 +32,7 @@ class MainActivity : AppCompatActivity() {
         if (isGranted) {
             openFilePicker()
         } else {
-            Toast.makeText(this, "需要存�储权限", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "需要存储权限", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -62,12 +63,11 @@ class MainActivity : AppCompatActivity() {
         val tvProgress = findViewById<TextView>(R.id.tvProgress)
 
         btnSelectFile.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                == PackageManager.PERMISSION_GRANTED
-            ) {
+            val permission = getRequiredPermission()
+            if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
                 openFilePicker()
             } else {
-                requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                requestPermissionLauncher.launch(permission)
             }
         }
 
@@ -112,10 +112,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissions() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        val permission = getRequiredPermission()
+        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissionLauncher.launch(permission)
         }
     }
 
@@ -191,15 +190,18 @@ class MainActivity : AppCompatActivity() {
     private fun updateProgressUI() {
         val tvProgress = findViewById<TextView>(R.id.tvProgress)
         val progressBar = findViewById<ProgressBar>(R.id.progressBar)
-        
+
         if (SpeechState.chunks.isNotEmpty()) {
-            val progressPercent = if (SpeechState.chunks.size > 0) 
-                (SpeechState.currentIndex * 100) / SpeechState.chunks.size else 0
+            val progressPercent = if (SpeechState.chunks.size > 0) {
+                (SpeechState.currentIndex * 100) / SpeechState.chunks.size
+            } else {
+                0
+            }
             progressBar.progress = progressPercent
-            tvProgress.text = "${SpeechState.currentIndex}/${SpeechState.chunks.size} �� 段落"
+            tvProgress.text = "${SpeechState.currentIndex}/${SpeechState.chunks.size} 段落"
         } else {
             progressBar.progress = 0
-            tvProgress.text = "0/0 �� 段落"
+            tvProgress.text = "0/0 段落"
         }
     }
 
@@ -207,5 +209,13 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         stopProgressUpdates()
         stopService(Intent(this, TtsService::class.java))
+    }
+
+    private fun getRequiredPermission(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
     }
 }
