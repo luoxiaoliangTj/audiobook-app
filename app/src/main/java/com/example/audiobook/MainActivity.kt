@@ -1,7 +1,10 @@
 package com.example.audiobook
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -16,6 +19,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import java.io.InputStream
 
 class MainActivity : AppCompatActivity() {
@@ -36,6 +40,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val utteranceCompletedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val nextIndex = intent?.getIntExtra(TtsService.EXTRA_NEXT_CHUNK_INDEX, -1) ?: -1
+            if (nextIndex >= 0 && nextIndex < SpeechState.chunks.size) {
+                loadNextChunk(nextIndex)
+            }
+        }
+    }
+
+    private fun loadNextChunk(index: Int) {
+        SpeechState.currentIndex = index
+        SpeechState.isPlaying = true
+        updatePlayPauseButtonStates()
+        updateProgressUI()
+        
+        val intent = Intent(this, TtsService::class.java).apply {
+            action = TtsService.ACTION_LOAD
+            putExtra(TtsService.EXTRA_TEXT, SpeechState.chunks[index])
+            putExtra(TtsService.EXTRA_CHUNK_INDEX, index)
+            putExtra(TtsService.EXTRA_TOTAL_CHUNKS, SpeechState.chunks.size)
+        }
+        startService(intent)
+        
+        // Start playing the next chunk
+        val playIntent = Intent(this, TtsService::class.java).apply {
+            action = TtsService.ACTION_PLAY
+        }
+        startService(playIntent)
+        startProgressUpdates()
+    }
+
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -51,6 +86,10 @@ class MainActivity : AppCompatActivity() {
 
         setupViews()
         checkPermissions()
+        
+        // Register broadcast receiver for auto-advance
+        val filter = IntentFilter(TtsService.BROADCAST_UTTERANCE_COMPLETED)
+        LocalBroadcastManager.getInstance(this).registerReceiver(utteranceCompletedReceiver, filter)
     }
 
     private fun setupViews() {
@@ -127,28 +166,37 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvFileName).text = uri.lastPathSegment ?: "未选择文件"
 
         try {
-            val inputStream: InputStream = contentResolver.openInputStream(uri) ?: return
-            val fullText = inputStream.bufferedReader().use { it.readText() }
+            val fileName = uri.lastPathSegment?.lowercase() ?: ""
+            val fullText: String? = if (fileName.endsWith(".epub")) {
+                EpubParser.extractText(this, contentResolver, uri)
+            } else {
+                val inputStream: InputStream = contentResolver.openInputStream(uri) ?: return@loadAndSpeakFile
+                inputStream.bufferedReader().use { it.readText() }
+            }
+            
+            fullText?.let { text ->
+                // Split text into chunks for better pause/resume functionality
+                SpeechState.chunks = chunkText(text)
+                SpeechState.currentIndex = 0
+                SpeechState.isPlaying = false
 
-            // Split text into chunks for better pause/resume functionality
-            SpeechState.chunks = chunkText(fullText)
-            SpeechState.currentIndex = 0
-            SpeechState.isPlaying = false
+                updateProgressUI()
 
-            updateProgressUI()
-
-            // Start with first chunk
-            if (SpeechState.chunks.isNotEmpty()) {
-                val intent = Intent(this, TtsService::class.java).apply {
-                    action = TtsService.ACTION_LOAD
-                    putExtra(TtsService.EXTRA_TEXT, SpeechState.chunks[0])
-                    putExtra(TtsService.EXTRA_CHUNK_INDEX, 0)
-                    putExtra(TtsService.EXTRA_TOTAL_CHUNKS, SpeechState.chunks.size)
+                // Start with first chunk
+                if (SpeechState.chunks.isNotEmpty()) {
+                    val intent = Intent(this, TtsService::class.java).apply {
+                        action = TtsService.ACTION_LOAD
+                        putExtra(TtsService.EXTRA_TEXT, SpeechState.chunks[0])
+                        putExtra(TtsService.EXTRA_CHUNK_INDEX, 0)
+                        putExtra(TtsService.EXTRA_TOTAL_CHUNKS, SpeechState.chunks.size)
+                    }
+                    startService(intent)
+                    findViewById<View>(R.id.btnPlay).visibility = View.VISIBLE
+                    findViewById<View>(R.id.btnPause).visibility = View.VISIBLE
+                    findViewById<View>(R.id.btnReplay).visibility = View.VISIBLE
                 }
-                startService(intent)
-                findViewById<View>(R.id.btnPlay).visibility = View.VISIBLE
-                findViewById<View>(R.id.btnPause).visibility = View.VISIBLE
-                findViewById<View>(R.id.btnReplay).visibility = View.VISIBLE
+            } ?: run {
+                Toast.makeText(this, "无法提取文件内容", Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
             Toast.makeText(this, "无法读取文件: ${e.message}", Toast.LENGTH_LONG).show()
@@ -209,6 +257,9 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         stopProgressUpdates()
         stopService(Intent(this, TtsService::class.java))
+        
+        // Unregister broadcast receiver
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(utteranceCompletedReceiver)
     }
 
     private fun getRequiredPermission(): String {

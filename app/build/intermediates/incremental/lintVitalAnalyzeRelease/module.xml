@@ -1,0 +1,19 @@
+<lint-module
+    format="1"
+    dir="/data/data/com.termux/files/home/audiobook-app/app"
+    name=":app"
+    type="APP"
+    maven="AudiobookApp:app:"
+    agpVersion="8.1.0"
+    buildFolder="build"
+    bootClassPath="/data/data/com.termux/files/home/android-sdk/platforms/android-34/android.jar:/data/data/com.termux/files/home/android-sdk/build-tools/33.0.1/core-lambda-stubs.jar"
+    javaSourceLevel="17"
+    compileTarget="android-34"
+    neverShrinking="true">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>

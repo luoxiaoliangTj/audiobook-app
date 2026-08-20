@@ -6,11 +6,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import java.util.Locale
 
 class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUtteranceCompletedListener {
@@ -28,6 +30,10 @@ class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUttera
         const val ACTION_PLAY = "com.example.audiobook.PLAY"
         const val ACTION_STOP = "com.example.audiobook.STOP"
         const val ACTION_NEXT_CHUNK = "com.example.audiobook.NEXT_CHUNK"
+        
+        // Broadcast actions
+        const val BROADCAST_UTTERANCE_COMPLETED = "com.example.audiobook.UTTERANCE_COMPLETED"
+        const val EXTRA_NEXT_CHUNK_INDEX = "nextChunkIndex"
     }
 
     private var tts: TextToSpeech? = null
@@ -115,10 +121,20 @@ class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUttera
 
     override fun onUtteranceCompleted(utteranceId: String?) {
         isUtteranceCompleted = true
-        if (isPlaying) {
-            // Auto-advance to next chunk if we're still supposed to be playing
-            // MainActivity will handle this via its own logic
-            Log.d(TAG, "Utterance completed for chunk $currentChunkIndex")
+        if (isPlaying && currentChunkIndex < totalChunks - 1) {
+            // Auto-advance to next chunk
+            val nextIndex = currentChunkIndex + 1
+            Log.d(TAG, "Utterance completed for chunk $currentChunkIndex, advancing to $nextIndex")
+            
+            // Send broadcast to MainActivity to load next chunk
+            val intent = Intent(BROADCAST_UTTERANCE_COMPLETED).apply {
+                putExtra(EXTRA_NEXT_CHUNK_INDEX, nextIndex)
+            }
+            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        } else if (isPlaying && currentChunkIndex >= totalChunks - 1) {
+            Log.d(TAG, "Playback completed - reached end of book")
+            isPlaying = false
+            updateNotification()
         }
     }
 
@@ -129,12 +145,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUttera
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val progressPercent = if (totalChunks > 0) (currentChunkIndex * 100) / totalChunks else 0
         val progressText = if (totalChunks > 0) "$currentChunkIndex/$totalChunks" else "0/0"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("听书�阅读器")
-            .setContentText("正在播放: $progressText �� 段落")
+            .setContentTitle("听书阅读器")
+            .setContentText("正在播放: $progressText 段落")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
