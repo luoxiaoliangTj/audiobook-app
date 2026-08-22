@@ -1,7 +1,7 @@
 # Audiobook App - 项目计划与进度跟踪
 
-> 更新时间：2025-08-20  
-> 当前版本：v1.3.6  
+> 更新时间：2025-08-21 22:45  
+> 当前版本：v1.3.7  
 > 目标：打造功能完整的 EPUB/TXT 有声书阅读器
 
 ---
@@ -19,24 +19,26 @@
 
 ## 📋 P0 基础补全 - 详细任务拆解
 
-### P0-1 EPUB 章节结构解析 ✅ **已完成基础版，需增强**
+### P0-1 EPUB 章节结构解析 ✅ **已完成**
 - [x] 基础 EPUB 解析（解压 + OPF/Spine + 正则去标签）
-- [ ] **完整章节树解析**（NAV/NCX 目录层级、标题层级）
-- [ ] **CFI (Canonical Fragment Identifier) 支持** - 精准定位任意位置
-- [ ] 章节元数据（标题、顺序、字数、是否为封面/版权页）
-- [ ] 图片/资源引用解析（用于后续阅读器渲染）
+- [x] **完整章节树解析**（NAV/NCX 目录层级、标题层级）
+- [x] **CFI (Canonical Fragment Identifier) 支持** - 精准定位任意位置
+- [x] 章节元数据（标题、顺序、字数、是否为封面/版权页）
+- [x] 图片/资源引用解析（用于后续阅读器渲染）
 
-### P0-2 智能分句/分段切分
-- [ ] 按句号/问号/感叹号/换行/标题切分，避免断句
-- [ ] 中英文混合标点处理
-- [ ] 段落级 + 句级双层结构（TTS 用句级，进度用段落级）
-- [ ] 可配置的最大/最小片段长度
+### P0-2 智能分句/分段切分 ✅ **已完成**
+- [x] 按句号/问号/感叹号/换行/标题切分，避免断句
+- [x] 中英文混合标点处理
+- [x] 段落级 + 句级双层结构（TTS 用句级，进度用段落级）
+- [x] 可配置的最大/最小片段长度
 
-### P0-3 进度持久化 (Room)
-- [ ] Room 数据库设计：
-  - `Book` (id, uri, title, author, coverPath, fileType, totalChapters, totalChunks, createdAt, updatedAt)
-  - `ReadingProgress` (bookId, chapterIndex, chunkIndex, charOffset, cfi, updatedAt)
-  - `Chapter` (bookId, index, title, startChunk, endChunk, wordCount, cfi)
+### P0-3 进度持久化 (Room) ✅ **已完成**
+- [x] Room 数据库设计：
+  - `BookEntity` (id, uri, title, author, coverPath, fileType, totalChapters, totalChunks, createdAt, updatedAt)
+  - `ReadingProgressEntity` (bookId, chapterIndex, chunkIndex, charOffset, cfi, updatedAt)
+  - `ChapterEntity` (bookId, index, title, startChunk, endChunk, wordCount, cfi)
+- [x] DAO 接口与 Repository
+- [x] ViewModel 集成
 - [ ] DataStore 存储用户偏好（语速、音调、主题、字体大小等）
 - [ ] 启动时自动恢复上次阅读位置
 
@@ -146,6 +148,7 @@
 |------|------|----------|
 | 2025-08-20 | v1.3.6 | 修复 TTS 通知乱码、新增基础 EPUB 支持、实现自动衔接播放 |
 | 2025-08-20 | - | 创建项目计划文档，确立 P0-P3 四阶段路线图 |
+| 2025-08-21 | v1.3.7 | 优化分句算法：按句子/段落切分，避免断句；减小ChunkSize至200字；更新项目计划 |
 
 ---
 

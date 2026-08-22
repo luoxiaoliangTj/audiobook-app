@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
     private var isPlaying = false
     private var progressHandler = Handler(Looper.getMainLooper())
     private var progressRunnable: Runnable? = null
-    private val CHUNK_SIZE = 1000 // Characters per chunk for smoother pause/resume
+    private val CHUNK_SIZE = 200 // Characters per chunk for smoother pause/resume
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -167,18 +167,56 @@ class MainActivity : AppCompatActivity() {
 
         try {
             val fileName = uri.lastPathSegment?.lowercase() ?: ""
-            val fullText: String? = if (fileName.endsWith(".epub")) {
-                EpubParser.extractText(this, contentResolver, uri)
+            val epubBook = if (fileName.endsWith(".epub")) {
+                EpubParser.parseEpub(this, contentResolver, uri)
             } else {
                 val inputStream: InputStream = contentResolver.openInputStream(uri) ?: return@loadAndSpeakFile
-                inputStream.bufferedReader().use { it.readText() }
+                val fullText = inputStream.bufferedReader().use { it.readText() }
+                // For plain text, create a simple EpubBook with one chapter
+                EpubBook(
+                    uri = uri,
+                    title = uri.lastPathSegment ?: "Unknown",
+                    author = null,
+                    language = null,
+                    identifier = null,
+                    coverHref = null,
+                    chapters = listOf(EpubChapter(
+                        id = "chapter_0",
+                        title = "全文",
+                        href = "",
+                        order = 0,
+                        content = fullText
+                    )),
+                    spine = emptyList(),
+                    manifest = emptyMap(),
+                    metadata = emptyMap()
+                )
             }
             
-            fullText?.let { text ->
-                // Split text into chunks for better pause/resume functionality
-                SpeechState.chunks = chunkText(text)
+            epubBook?.let { book ->
+                // Flatten all chapters into chunks for TTS
+                val allChunks = mutableListOf<String>()
+                val chapterChunkRanges = mutableListOf<Pair<Int, Int>>() // (startChunk, endChunk) for each chapter
+                
+                book.chapters.forEach { chapter ->
+                    val chapterText = chapter.content ?: ""
+                    if (chapterText.isNotEmpty()) {
+                        val startChunk = allChunks.size
+                        val chapterChunks = splitIntoSpeechChunks(chapterText)
+                        allChunks.addAll(chapterChunks)
+                        val endChunk = allChunks.size - 1
+                        chapterChunkRanges.add(Pair(startChunk, endChunk))
+                    } else {
+                        chapterChunkRanges.add(Pair(-1, -1))
+                    }
+                }
+                
+                SpeechState.chunks = allChunks
+                SpeechState.chapterChunkRanges = chapterChunkRanges
+                SpeechState.currentChapterIndex = 0
                 SpeechState.currentIndex = 0
                 SpeechState.isPlaying = false
+                SpeechState.currentBook = book
 
                 updateProgressUI()
 
@@ -205,14 +243,45 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun chunkText(text: String): List<String> {
+    private fun splitIntoSpeechChunks(text: String): List<String> {
+        if (text.isEmpty()) return emptyList()
+
+        // Split into paragraphs by one or more blank lines
+        val paragraphs = text.split(Regex("\\n\\s*\\n"))
         val chunks = mutableListOf<String>()
-        var index = 0
-        while (index < text.length) {
-            val endIndex = Math.min(index + CHUNK_SIZE, text.length)
-            chunks.add(text.substring(index, endIndex))
-            index = endIndex
+
+        for (paragraph in paragraphs) {
+            val trimmed = paragraph.trim()
+            if (trimmed.isEmpty()) continue
+
+            // Split paragraph into sentences: we want to keep the punctuation with the sentence
+            // Using split by lookbehind for punctuation: (?<=[。！？.!?])
+            val sentences = trimmed.split(Regex("(?<=[。！？.!?])"))
+            // Now sentences may have empty strings if there are consecutive punctuations? We'll filter.
+            val sentenceList = sentences.filter { it.isNotEmpty() }
+
+            var currentChunk = ""
+            for (sentence in sentenceList) {
+                if (currentChunk.length + sentence.length <= 200) {
+                    currentChunk += sentence
+                } else {
+                    if (currentChunk.isNotEmpty()) {
+                        chunks.add(currentChunk)
+                        currentChunk = sentence
+                    } else {
+                        // The sentence itself is too long, we split it by 200
+                        val parts = sentence.chunked(200).map { it.toString() }
+                        chunks.addAll(parts)
+                        currentChunk = ""
+                    }
+                }
+            }
+            if (currentChunk.isNotEmpty()) {
+                chunks.add(currentChunk)
+                currentChunk = ""
+            }
         }
+
         return chunks
     }
 
