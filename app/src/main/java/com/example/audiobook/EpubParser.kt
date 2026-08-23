@@ -68,8 +68,9 @@ object EpubParser {
             
             val opfDir = opfEntry.name.substringBeforeLast("/")
             val opfInputStream = zipFile.getInputStream(opfEntry)
-            val opfContent = opfInputStream.bufferedReader().use { it.readText() }
+            val opfBytes = opfInputStream.readBytes()
             opfInputStream.close()
+            val opfContent = String(opfBytes, Charsets.UTF_8)
             
             // 2. 解析 OPF - manifest, spine, metadata
             val (manifestItems, spineItems, metadata) = parseOpf(opfContent, opfDir)
@@ -245,15 +246,20 @@ object EpubParser {
     }
     
     private fun parseNavDocument(zipFile: ZipFile, opfDir: String, navHref: String): List<EpubChapter> {
-        val resolvedHref = resolveHref(opfDir, navHref)
-        val entry = zipFile.getEntry(resolvedHref) ?: return emptyList()
+        val entry = findZipEntry(zipFile, navHref, opfDir) ?: return emptyList()
         
         val chapters = mutableListOf<EpubChapter>()
         
         try {
             val inputStream = zipFile.getInputStream(entry)
-            val content = inputStream.bufferedReader().use { it.readText() }
+            val rawBytes = inputStream.readBytes()
             inputStream.close()
+            val charset = detectCharset(String(rawBytes, Charsets.UTF_8))
+            val content = if (charset.lowercase().replace("-", "") == "utf8") {
+                String(rawBytes, Charsets.UTF_8)
+            } else {
+                String(rawBytes, java.nio.charset.Charset.forName(charset))
+            }
             
             val factory = XmlPullParserFactory.newInstance()
             factory.isNamespaceAware = true
@@ -310,15 +316,20 @@ object EpubParser {
     }
     
     private fun parseNcxDocument(zipFile: ZipFile, opfDir: String, ncxHref: String): List<EpubChapter> {
-        val resolvedHref = resolveHref(opfDir, ncxHref)
-        val entry = zipFile.getEntry(resolvedHref) ?: return emptyList()
+        val entry = findZipEntry(zipFile, ncxHref, opfDir) ?: return emptyList()
         
         val chapters = mutableListOf<EpubChapter>()
         
         try {
             val inputStream = zipFile.getInputStream(entry)
-            val content = inputStream.bufferedReader().use { it.readText() }
+            val rawBytes = inputStream.readBytes()
             inputStream.close()
+            val charset = detectCharset(String(rawBytes, Charsets.UTF_8))
+            val content = if (charset.lowercase().replace("-", "") == "utf8") {
+                String(rawBytes, Charsets.UTF_8)
+            } else {
+                String(rawBytes, java.nio.charset.Charset.forName(charset))
+            }
             
             val factory = XmlPullParserFactory.newInstance()
             factory.isNamespaceAware = true
@@ -387,16 +398,25 @@ object EpubParser {
         val href = chapter.href
         if (href.isEmpty()) return null
         
-        val resolvedHref = resolveHref(opfDir, href)
-        val entry = zipFile.getEntry(resolvedHref) ?: return null
+        val entry = findZipEntry(zipFile, href, opfDir) ?: return null
         
         try {
             val inputStream = zipFile.getInputStream(entry)
-            val htmlContent = inputStream.bufferedReader().use { it.readText() }
+            val rawBytes = inputStream.readBytes()
             inputStream.close()
+            
+            // 先按 UTF-8 读取检测编码，再用正确编码解码
+            val contentForCharsetDetect = String(rawBytes, Charsets.UTF_8)
+            val charset = detectCharset(contentForCharsetDetect)
+            val htmlContent = if (charset.lowercase().replace("-", "") == "utf8") {
+                contentForCharsetDetect
+            } else {
+                String(rawBytes, java.nio.charset.Charset.forName(charset))
+            }
+            
             return htmlToPlainText(htmlContent)
         } catch (e: Exception) {
-            Log.e(TAG, "Error extracting chapter content: $resolvedHref", e)
+            Log.e(TAG, "Error extracting chapter content: $href", e)
             return null
         }
     }
@@ -415,6 +435,46 @@ object EpubParser {
             }
         }
         return resolvedDir
+    }
+
+    /**
+     * 尝试解码 URL 编码路径并查找 zip entry
+     * EPUB 中空格常被编码为 %20，zip entry 名可能是解码后的原始路径
+     */
+    private fun findZipEntry(zipFile: ZipFile, href: String, opfDir: String): java.util.zip.ZipEntry? {
+        val resolved = resolveHref(opfDir, href)
+        // 先直接查找
+        zipFile.getEntry(resolved)?.let { return it }
+        // 再尝试 URL 解码后查找
+        try {
+            val decoded = java.net.URLDecoder.decode(resolved, "UTF-8")
+            zipFile.getEntry(decoded)?.let { return it }
+        } catch (_: Exception) {}
+        // 再尝试把 resolved 中的 %xx 手动替换
+        val manualDecode = resolved
+            .replace("%20", " ")
+            .replace("%2F", "/")
+            .replace("%2f", "/")
+            .replace("%3A", ":")
+            .replace("%3a", ":")
+            .replace("%5C", "\\")
+            .replace("%5c", "\\")
+        if (manualDecode != resolved) {
+            zipFile.getEntry(manualDecode)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * 从 HTML/XML 声明的 charset 推断编码
+     * 例如 <?xml version="1.0" encoding="gb2312"?> 或 <meta charset="utf-8">
+     */
+    private fun detectCharset(content: String): String {
+        val xmlDeclRegex = Regex("<\\?xml[^>]*encoding\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+        xmlDeclRegex.find(content)?.let { return it.groupValues[1] }
+        val metaCharsetRegex = Regex("<meta[^>]*charset\\s*=\\s*[\"']?([^\"'>\\s]+)", RegexOption.IGNORE_CASE)
+        metaCharsetRegex.find(content)?.let { return it.groupValues[1] }
+        return "UTF-8"
     }
     
     private fun flattenChapters(chapters: List<EpubChapter>): List<EpubChapter> {
@@ -438,17 +498,34 @@ object EpubParser {
     }
     
     private fun htmlToPlainText(html: String): String {
+        // 检测 XML/HTML 声明的编码
+        val charset = detectCharset(html)
+        
         return html
-            .replace("<script[^>]*>.*?</script>".toRegex(), "")  // Remove scripts
-            .replace("<style[^>]*>.*?</style>".toRegex(), "")   // Remove styles
-            .replace("<[^>]+>".toRegex(), " ")  // Remove HTML tags
-            .replace("&nbsp;".toRegex(), " ")   // Replace &nbsp; with space
-            .replace("&".toRegex(), "&")    // Replace & with &
-            .replace("<".toRegex(), "<")     // Replace < with <
-            .replace(">".toRegex(), ">")     // Replace > with >
-            .replace("\\\\\\\"".toRegex(), "\\\"")  // Replace " with "
-            .replace("'".toRegex(), "'")    // Replace ' with '
-            .replace("\\s+".toRegex(), " ")     // Normalize whitespace
+            .replace("<script[^>]*>.*?</script>".toRegex(), "")
+            .replace("<style[^>]*>.*?</style>".toRegex(), "")
+            .replace("<[^>]+>".toRegex(), " ")
+            // 修复：正确解码 HTML 实体
+            .replace("&amp;".toRegex(), "&")
+            .replace("&lt;".toRegex(), "<")
+            .replace("&gt;".toRegex(), ">")
+            .replace("&quot;".toRegex(), "\"")
+            .replace("&apos;".toRegex(), "'")
+            .replace("&#39;".toRegex(), "'")
+            .replace("&nbsp;".toRegex(), " ")
+            // 处理数字实体 &#123;
+            .replace(Regex("&#(\\d+);")) { match -> 
+                try {
+                    match.groupValues[1].toInt().toString()
+                } catch (_: Exception) { match.value }
+            }
+            // 处理十六进制实体 &#x7B;
+            .replace(Regex("&#x([0-9a-fA-F]+);")) { match ->
+                try {
+                    match.groupValues[1].toInt(16).toString()
+                } catch (_: Exception) { match.value }
+            }
+            .replace("\\s+".toRegex(), " ")
             .trim()
     }
 }
