@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="#333333"
+    android:orientation="horizontal"
+    android:padding="4dp"
+    android:elevation="8dp"
+    android:gravity="center_vertical">
+
+    <Button
+        android:id="@+id/btnReadHere"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:text="▶ 朗读"
+        android:textSize="12sp"
+        android:textColor="#FFFFFF"
+        android:background="?android:attr/selectableItemBackground"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:minWidth="0dp" />
+
+    <Button
+        android:id="@+id/btnNote"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:text="📝 笔记"
+        android:textSize="12sp"
+        android:textColor="#FFFFFF"
+        android:background="?android:attr/selectableItemBackground"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:minWidth="0dp" />
+
+    <Button
+        android:id="@+id/btnHighlight"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:text="🖍 划线"
+        android:textSize="12sp"
+        android:textColor="#FFFFFF"
+        android:background="?android:attr/selectableItemBackground"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:minWidth="0dp" />
+
+    <Button
+        android:id="@+id/btnCopy"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:text="📋 复制"
+        android:textSize="12sp"
+        android:textColor="#FFFFFF"
+        android:background="?android:attr/selectableItemBackground"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:minWidth="0dp" />
+
+    <Button
+        android:id="@+id/btnNotes"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:text="📝 笔记"
+        android:textSize="12sp"
+        android:textColor="#FFFFFF"
+        android:background="?android:attr/selectableItemBackground"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:minWidth="0dp" />
+
+</LinearLayout>

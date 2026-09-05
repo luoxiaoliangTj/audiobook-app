@@ -20,8 +20,10 @@ import android.util.Log
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
-import android.widget.*
+import android.widget.*;
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -57,6 +59,8 @@ class ReaderActivity : AppCompatActivity() {
         getSharedPreferences("reading_progress", Context.MODE_PRIVATE)
     }
 
+    private var intentHandled = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -72,10 +76,130 @@ class ReaderActivity : AppCompatActivity() {
         setupButtonListeners()
         setupToggleListeners()
 
+        handleIntent(intent)
+        // Only restore last book if handleIntent didn't load anything
+        if (!intentHandled) {
+            restoreLastBook()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        savePdfProgress()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        savePdfProgress()
+    }
+
+    private fun savePdfProgress() {
+        if (currentBookUri == null) return
+        val editor = prefs.edit()
+        val key = "book_${currentBookUri.hashCode()}"
+        val scrollY = findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.pdfViewPager).currentItem
+        val textScrollY = scrollContent.scrollY
+        editor.putInt("${key}_pdf_scroll", scrollY)
+        editor.putInt("${key}_text_scroll", textScrollY)
+        editor.putBoolean("${key}_ocr", pdfOcrMode)
+        editor.putBoolean("${key}_is_pdf", isPdfBook)
+        editor.putInt("${key}_chunk", SpeechState.currentIndex)
+        editor.putString("last_book_uri", currentBookUri.toString())
+        editor.putString("last_book_title", currentBookTitle)
+        editor.putLong("last_book_time", System.currentTimeMillis())
+        editor.apply()
+        dbg("保存进度: scrollY=$scrollY, textScroll=$textScrollY, chunk=${SpeechState.currentIndex}, isPdf=$isPdfBook, title=$currentBookTitle")
+    }
+
+    private fun restoreLastBook() {
+        val lastUri = prefs.getString("last_book_uri", null) ?: return
+        val lastTitle = prefs.getString("last_book_title", "未知书籍") ?: "未知书籍"
+        val lastTime = prefs.getLong("last_book_time", 0)
+        dbg("恢复上次书籍: $lastTitle, uri=$lastUri")
+        // Only restore if within 24 hours
+        if (System.currentTimeMillis() - lastTime > 24 * 60 * 60 * 1000) {
+            dbg("上次书籍已过期(>24h)，跳过恢复")
+            return
+        }
+        try {
+            val uri = Uri.parse(lastUri)
+            currentBookTitle = lastTitle
+            // Check if URI is still accessible
+            try {
+                contentResolver.openInputStream(uri)?.close()
+            } catch (e: Exception) {
+                dbg("上次书籍URI无法访问: ${e.message}")
+                return
+            }
+            // Reopen the book
+            isPdfBook = lastTitle.lowercase().endsWith(".pdf")
+            loadAndSpeakFile(uri)
+            // Restore scroll position after rendering
+            val key = "book_${uri.hashCode()}"
+            if (isPdfBook) {
+                val scrollY = prefs.getInt("${key}_pdf_scroll", 0)
+                dbg("恢复PDF滚动位置: $scrollY")
+                if (scrollY > 0) {
+                    findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.pdfViewPager).post {
+                        findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.pdfViewPager).setCurrentItem(scrollY, false)
+                    }
+                }
+                // Restore OCR mode if needed
+                val wasOcr = prefs.getBoolean("${key}_ocr", false)
+                if (wasOcr) {
+                    dbg("恢复OCR模式")
+                    findViewById<Button>(R.id.btnOcr).post {
+                        findViewById<Button>(R.id.btnOcr).performClick()
+                    }
+                }
+            } else {
+                val scrollY = prefs.getInt("${key}_text_scroll", 0)
+                val chunk = prefs.getInt("${key}_chunk", 0)
+                dbg("恢复文本滚动位置: $scrollY, chunk=$chunk")
+                if (scrollY > 0) {
+                    scrollContent.post { scrollContent.scrollTo(0, scrollY) }
+                }
+                if (chunk > 0) {
+                    SpeechState.currentIndex = chunk
+                }
+            }
+        } catch (e: Exception) {
+            dbg("恢复上次书籍失败: ${e.message}")
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
         val incomingUri = intent?.data
         val scrollToChunk = intent?.getIntExtra("scrollToChunk", -1) ?: -1
+        dbg("handleIntent: uri=$incomingUri, scrollToChunk=$scrollToChunk")
         if (incomingUri != null) {
+            intentHandled = true
             dbg("接收 URI: $incomingUri, scrollToChunk=$scrollToChunk")
+            // Clear previous content before loading new file
+            fullText = ""
+            SpeechState.reset()
+            textContent.text = ""
+            currentSelectionText = null
+            currentPdfText = ""
+            usePagination = false
+            findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.viewPager).adapter = null
+            pageAdapter = null
+            
+            // Reset PDF view state
+            pdfOcrMode = false
+            baiduOcr?.cancel()
+            baiduOcr = null
+            pdfRenderer?.close()
+            pdfRenderer = null
+            findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.pdfViewPager).visibility = View.GONE
+            findViewById<ScrollView>(R.id.scrollContent).visibility = View.VISIBLE
+            findViewById<Button>(R.id.btnOcr).visibility = View.GONE
             loadAndSpeakFile(incomingUri, scrollToChunk)
         }
     }
@@ -232,6 +356,34 @@ class ReaderActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnTheme).setOnClickListener { showThemeMenu(it) }
         findViewById<Button>(R.id.btnMore).setOnClickListener { showMoreMenu(it) }
 
+        // OCR button - toggle between PDF image view and OCR text view
+        findViewById<Button>(R.id.btnOcr).setOnClickListener {
+            if (pdfRenderer == null) return@setOnClickListener
+            val btn = it as Button
+            
+            if (pdfOcrMode) {
+                // Already in OCR text mode, switch back to PDF image view
+                pdfOcrMode = false
+                btn.text = "OCR 图"
+                findViewById<ScrollView>(R.id.scrollContent).visibility = View.GONE
+                findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.pdfViewPager).visibility = View.VISIBLE
+                // Re-enable toolbar for PDF image mode
+                findViewById<Button>(R.id.btnPlay).visibility = View.GONE
+                findViewById<Button>(R.id.btnPause).visibility = View.GONE
+                findViewById<Button>(R.id.btnReplay).visibility = View.GONE
+                findViewById<Button>(R.id.btnVoice).visibility = View.GONE
+                findViewById<Button>(R.id.btnPrevChapter).visibility = View.GONE
+                findViewById<Button>(R.id.btnNextChapter).visibility = View.GONE
+                findViewById<Button>(R.id.btnJumpTo).visibility = View.GONE
+                Toast.makeText(this, "已切回 PDF 图片模式", Toast.LENGTH_SHORT).show()
+            } else {
+                // Start OCR
+                pdfOcrMode = true
+                btn.text = "识别中..."
+                startOcr()
+            }
+        }
+
         findViewById<Button>(R.id.btnPlay).setOnClickListener {
             if (SpeechState.chunks.isEmpty()) { Toast.makeText(this, "无可播放内容", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
             if (!edgeTts.isCurrentlyPlaying()) {
@@ -267,6 +419,12 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun prevPage() {
+        if (usePagination) {
+            val viewPager = findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.viewPager)
+            val current = viewPager.currentItem
+            if (current > 0) viewPager.currentItem = current - 1
+            return
+        }
         val layout = textContent.layout ?: return
         val currentScroll = scrollContent.scrollY
         val pageHeight = scrollContent.height
@@ -275,6 +433,13 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun nextPage() {
+        if (usePagination) {
+            val viewPager = findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.viewPager)
+            val current = viewPager.currentItem
+            val maxIdx = (viewPager.adapter?.itemCount ?: 1) - 1
+            if (current < maxIdx) viewPager.currentItem = current + 1
+            return
+        }
         val layout = textContent.layout ?: return
         val currentScroll = scrollContent.scrollY
         val pageHeight = scrollContent.height
@@ -283,19 +448,25 @@ class ReaderActivity : AppCompatActivity() {
         scrollContent.scrollTo(0, newScroll)
     }
 
-    private fun setupToggleListeners() {
-        val topBar = findViewById<View>(R.id.topBar)
-        val bottomBar = findViewById<View>(R.id.bottomBar)
+    private lateinit var topBar: View
+    private lateinit var bottomBar: View
 
-        val toggleBars = {
-            val showBars = topBar.visibility != View.VISIBLE
-            topBar.visibility = if (showBars) View.VISIBLE else View.GONE
-            bottomBar.visibility = if (showBars) View.VISIBLE else View.GONE
-            dbg("点击屏幕: 工具栏 ${if (showBars) "显示" else "隐藏"}")
-        }
+    private fun toggleBars() {
+        val showBars = topBar.visibility != View.VISIBLE
+        topBar.visibility = if (showBars) View.VISIBLE else View.GONE
+        bottomBar.visibility = if (showBars) View.VISIBLE else View.GONE
+        dbg("点击屏幕: 工具栏 ${if (showBars) "显示" else "隐藏"}")
+    }
+
+    private fun setupToggleListeners() {
+        topBar = findViewById(R.id.topBar)
+        bottomBar = findViewById(R.id.bottomBar)
 
         // Only toggle on scrollContent click, NOT on textContent (which needs taps for selection)
         scrollContent.setOnClickListener { toggleBars() }
+        
+        // Also toggle on ViewPager click for paginated mode
+        findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.viewPager).setOnClickListener { toggleBars() }
     }
 
     private fun showThemeMenu(anchor: View) {
@@ -359,6 +530,13 @@ class ReaderActivity : AppCompatActivity() {
         textContent.setTextColor(Color.parseColor(currentFontColor))
         textContent.textSize = currentFontSize.toFloat()
         scrollContent.setBackgroundColor(Color.parseColor(currentBgColor))
+        
+        // Also update paginated pages
+        if (usePagination) {
+            pageAdapter?.setTextSize(currentFontSize.toFloat())
+            pageAdapter?.setColor(currentFontColor)
+            pageAdapter?.setBgColor(currentBgColor)
+        }
         dbg("应用主题: $currentTheme, bg=$currentBgColor, font=$currentFontColor, size=$currentFontSize")
     }
 
@@ -496,6 +674,13 @@ class ReaderActivity : AppCompatActivity() {
         contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
 
     private var isPdfBook = false
+    private var pdfRenderer: android.graphics.pdf.PdfRenderer? = null
+    private var pdfOcrMode = false
+    private var baiduOcr: BaiduOcrClient? = null
+    private var ocrPageBitmaps = mutableListOf<android.graphics.Bitmap>()
+    private var currentPdfText = ""
+    private var pageAdapter: PageAdapter? = null  // Accumulated OCR text for current PDF
+    private var usePagination = false
 
     private fun loadAndSpeakFile(uri: Uri, scrollToChunk: Int = -1) {
         val fileName = getFileName(uri)
@@ -541,10 +726,35 @@ class ReaderActivity : AppCompatActivity() {
                     if (pdfBook != null && pdfBook.text.isNotEmpty()) {
                         plainText = pdfBook.text
                         dbg("PDF 提取纯文本: ${plainText.length} 字符")
+                    } else if (pdfBook != null) {
+                        // PDF parsed but no/little text (e.g., scanned PDF) - render as images
+                        dbg("PDF 文本极少 (${pdfBook.text.length} 字符)，渲染为图片")
+                        renderPdfPages(uri)
+                        // Show toolbar for PDF image mode
+                        findViewById<View>(R.id.topBar).visibility = View.VISIBLE
+                        findViewById<View>(R.id.bottomBar).visibility = View.VISIBLE
+                        // Disable TTS buttons for PDF
+                        findViewById<Button>(R.id.btnPlay).visibility = View.GONE
+                        findViewById<Button>(R.id.btnPause).visibility = View.GONE
+                        findViewById<Button>(R.id.btnReplay).visibility = View.GONE
+                        findViewById<Button>(R.id.btnVoice).visibility = View.GONE
+                        findViewById<Button>(R.id.btnPrevChapter).visibility = View.GONE
+                        findViewById<Button>(R.id.btnNextChapter).visibility = View.GONE
+                        findViewById<Button>(R.id.btnJumpTo).visibility = View.GONE
+                        return  // Skip the rest of the text processing
                     } else {
-                        val crashLog = PdfParser.getCrashLog()
-                        dbg("PDF 解析失败，日志: $crashLog")
-                        Toast.makeText(this, "PDF 解析失败: ${if (crashLog.contains("init")) "PDFBox初始化失败" else "无法提取文本"}", Toast.LENGTH_LONG).show()
+                        val logs = PdfParser.getLogs()
+                        dbg("PDF 解析失败，日志: $logs")
+                        val shortLog = logs.lines().filter { it.isNotBlank() }.takeLast(3).joinToString("\n")
+                        Toast.makeText(this, "PDF 解析失败: $shortLog", Toast.LENGTH_LONG).show()
+                        // Also save to accessible location
+                        try {
+                            val extDir = getExternalFilesDir(null)
+                            if (extDir != null) {
+                                val extFile = File(extDir, "pdfbox_crash.txt")
+                                extFile.appendText("PDF parse failure:\n$logs\n\n")
+                            }
+                        } catch (_: Exception) {}
                     }
                 } catch (e: Exception) {
                     dbg("PDF 异常: ${e.message}")
@@ -562,80 +772,82 @@ class ReaderActivity : AppCompatActivity() {
                 updateProgressUI()
                 dbg("分块: ${SpeechState.chunks.size}")
 
-                if (SpeechState.chunks.isNotEmpty()) {
-                    // Display: use Html.fromHtml if we have images, otherwise plain text
-                    if (htmlContent != null && extractedImages.isNotEmpty()) {
-                        var processedHtml = htmlContent!!
-                        // Build filename -> File lookup for fallback matching
-                        val fileByFilename = extractedImages.map { it.key.substringAfterLast("/") to it.value }.toMap()
-                        // Use regex to find and replace img src attributes
-                        val imgSrcRegex = Regex("""(<img[^>]+src\s*=\s*["'])([^"']+)(["'])""", RegexOption.IGNORE_CASE)
-                        processedHtml = imgSrcRegex.replace(processedHtml) { matchResult ->
-                            val prefix = matchResult.groupValues[1]
-                            val originalSrc = matchResult.groupValues[2]
-                            val suffix = matchResult.groupValues[3]
-                            val fileName = originalSrc.substringAfterLast("/")
-                            // Try exact match, then endsWith, then filename
-                            val matchedFile = extractedImages[originalSrc]
-                                ?: extractedImages.entries.find { it.key.endsWith("/$fileName") || it.key == fileName }?.value
-                                ?: fileByFilename[fileName]
-                            if (matchedFile != null) {
-                                dbg("图片替换: $originalSrc -> ${matchedFile.absolutePath}")
-                                "$prefix${matchedFile.absolutePath}$suffix"
-                            } else {
-                                dbg("图片未找到: $originalSrc")
-                                matchResult.value
+                // Setup paginated display with ViewPager2
+                setupPagination(fullText)
+                
+                // Display images for EPUB if available
+                if (htmlContent != null && extractedImages.isNotEmpty()) {
+                    // For EPUB with images, use old scroll mode (HTML rendering needed)
+                    var processedHtml = htmlContent!!
+                    val fileByFilename = extractedImages.map { it.key.substringAfterLast("/") to it.value }.toMap()
+                    val imgSrcRegex = Regex("""(<img[^>]+src\s*=\s*["'])([^"']+)(["'])""", RegexOption.IGNORE_CASE)
+                    processedHtml = imgSrcRegex.replace(processedHtml) { matchResult ->
+                        val prefix = matchResult.groupValues[1]
+                        val originalSrc = matchResult.groupValues[2]
+                        val suffix = matchResult.groupValues[3]
+                        val fileName = originalSrc.substringAfterLast("/")
+                        val matchedFile = extractedImages[originalSrc]
+                            ?: extractedImages.entries.find { it.key.endsWith("/$fileName") || it.key == fileName }?.value
+                            ?: fileByFilename[fileName]
+                        if (matchedFile != null) {
+                            dbg("图片替换: $originalSrc -> ${matchedFile.absolutePath}")
+                            "$prefix${matchedFile.absolutePath}$suffix"
+                        } else {
+                            dbg("图片未找到: $originalSrc")
+                            matchResult.value
+                        }
+                    }
+                    val imageGetter = Html.ImageGetter { source ->
+                        val file = File(source)
+                        if (file.exists()) {
+                            val drawable = Drawable.createFromPath(source)
+                            if (drawable != null) {
+                                val ratio = drawable.intrinsicWidth.toFloat() / drawable.intrinsicHeight.toFloat()
+                                val maxW = textContent.width - 48
+                                val w = if (maxW > 0 && ratio > 0) maxW.coerceAtMost(drawable.intrinsicWidth) else drawable.intrinsicWidth
+                                val h = (w / ratio).toInt()
+                                drawable.setBounds(0, 0, w, h)
                             }
-                        }
-                        val imageGetter = Html.ImageGetter { source ->
-                            val file = File(source)
-                            if (file.exists()) {
-                                val drawable = Drawable.createFromPath(source)
-                                if (drawable != null) {
-                                    val ratio = drawable.intrinsicWidth.toFloat() / drawable.intrinsicHeight.toFloat()
-                                    val maxW = textContent.width - 48
-                                    val w = if (maxW > 0 && ratio > 0) maxW.coerceAtMost(drawable.intrinsicWidth) else drawable.intrinsicWidth
-                                    val h = (w / ratio).toInt()
-                                    drawable.setBounds(0, 0, w, h)
-                                }
-                                drawable
-                            } else null
-                        }
-                        val spanned = Html.fromHtml(processedHtml, imageGetter, null)
-                        textContent.setText(spanned, TextView.BufferType.EDITABLE)
-                        dbg("HTML 渲染完成，含图片")
-                    } else {
-                        // Use EDITABLE buffer type so we can add spans later without resetting text
-                        textContent.setText(fullText, TextView.BufferType.EDITABLE)
-                        dbg("全文加载: ${fullText.length} 字符")
+                            drawable
+                        } else null
                     }
+                    val spanned = Html.fromHtml(processedHtml, imageGetter, null)
+                    textContent.setText(spanned, TextView.BufferType.EDITABLE)
+                    dbg("HTML 渲染完成，含图片")
+                } else {
+                    textContent.setText(fullText, TextView.BufferType.EDITABLE)
+                    dbg("全文加载: ${fullText.length} 字符")
+                }
 
-                    restoreHighlights()
+                restoreHighlights()
+            }
 
-                    findViewById<View>(R.id.topBar).visibility = View.VISIBLE
-                    findViewById<View>(R.id.bottomBar).visibility = View.VISIBLE
+            if (plainText.isNotEmpty()) {
+                findViewById<View>(R.id.topBar).visibility = View.VISIBLE
+                findViewById<View>(R.id.bottomBar).visibility = View.VISIBLE
+                if (!usePagination) {
                     scrollContent.visibility = View.VISIBLE
-                    updatePlayPauseButtons()
-                    applyTheme()
-                    dbg("内容已加载，工具栏设为 visible")
-                    if (isPdfBook) {
-                        Toast.makeText(this, "PDF 已加载，当前版本不支持朗读", Toast.LENGTH_LONG).show()
-                        findViewById<Button>(R.id.btnPlay).visibility = View.GONE
-                        findViewById<Button>(R.id.btnPause).visibility = View.GONE
-                        findViewById<Button>(R.id.btnReplay).visibility = View.GONE
-                        findViewById<Button>(R.id.btnVoice).visibility = View.GONE
-                        findViewById<Button>(R.id.btnPrevChapter).visibility = View.GONE
-                        findViewById<Button>(R.id.btnNextChapter).visibility = View.GONE
-                        findViewById<Button>(R.id.btnJumpTo).visibility = View.GONE
-                    } else {
-                        Toast.makeText(this, "已加载 ${SpeechState.chunks.size} 段", Toast.LENGTH_SHORT).show()
-                    }
+                }
+                updatePlayPauseButtons()
+                applyTheme()
+                dbg("内容已加载，工具栏设为 visible, usePagination=$usePagination")
+                if (isPdfBook) {
+                    Toast.makeText(this, "PDF 已加载，当前版本不支持朗读", Toast.LENGTH_LONG).show()
+                    findViewById<Button>(R.id.btnPlay).visibility = View.GONE
+                    findViewById<Button>(R.id.btnPause).visibility = View.GONE
+                    findViewById<Button>(R.id.btnReplay).visibility = View.GONE
+                    findViewById<Button>(R.id.btnVoice).visibility = View.GONE
+                    findViewById<Button>(R.id.btnPrevChapter).visibility = View.GONE
+                    findViewById<Button>(R.id.btnNextChapter).visibility = View.GONE
+                    findViewById<Button>(R.id.btnJumpTo).visibility = View.GONE
+                } else {
+                    Toast.makeText(this, "已加载 ${SpeechState.chunks.size} 段", Toast.LENGTH_SHORT).show()
+                }
 
-                    if (scrollToChunk >= 0) {
-                        textContent.post {
-                            scrollToChunk(scrollToChunk)
-                            dbg("滚动到 chunk $scrollToChunk")
-                        }
+                if (scrollToChunk >= 0) {
+                    textContent.post {
+                        scrollToChunk(scrollToChunk)
+                        dbg("滚动到 chunk $scrollToChunk")
                     }
                 }
             } else {
@@ -753,6 +965,15 @@ class ReaderActivity : AppCompatActivity() {
 
     private fun scrollToChunk(chunkIdx: Int) {
         if (chunkIdx < 0 || chunkIdx >= chunkCharStarts.size) return
+        if (usePagination) {
+            // In paginated mode, switch to the page containing this chunk
+            val charStart = chunkCharStarts[chunkIdx]
+            val pageIdx = pageAdapter?.getPageForCharPosition(charStart) ?: 0
+            val viewPager = findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.viewPager)
+            viewPager.currentItem = pageIdx
+            dbg("滚动到 chunk $chunkIdx, 页面 $pageIdx")
+            return
+        }
         val charStart = chunkCharStarts[chunkIdx]
         val layout = textContent.layout ?: return
         val text = textContent.text.toString()
@@ -766,4 +987,168 @@ class ReaderActivity : AppCompatActivity() {
     private fun getRequiredPermission(): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) android.Manifest.permission.READ_MEDIA_AUDIO
         else android.Manifest.permission.READ_EXTERNAL_STORAGE
+
+    private fun startOcr() {
+        if (pdfRenderer == null) return
+        pdfOcrMode = true
+        findViewById<Button>(R.id.btnOcr).text = "识别中..."
+        
+        // Initialize OCR client
+        baiduOcr = BaiduOcrClient(
+            context = this,
+            onProgress = { msg ->
+                runOnUiThread {
+                    findViewById<Button>(R.id.btnOcr).text = msg
+                }
+            },
+            onResult = { result ->
+                runOnUiThread {
+                    if (result == "READY") {
+                        // Start recognizing pages
+                        startPageOcr(0)
+                    } else if (result.startsWith("PAGE:")) {
+                        val parts = result.split(":", limit = 3)
+                        if (parts.size == 3) {
+                            val pageNum = parts[1].toIntOrNull() ?: 0
+                            val text = parts[2]
+                            dbg("OCR page $pageNum: ${text.length} chars")
+                            // Append to currentPdfText
+                            currentPdfText = if (currentPdfText.isEmpty()) {
+                                text
+                            } else {
+                                currentPdfText + "\n\n--- 第 $pageNum 页 ---\n" + text
+                            }
+                            // Continue with next page
+                            startPageOcr(pageNum + 1)
+                        }
+                    }
+                }
+            },
+            onError = { err ->
+                runOnUiThread {
+                    dbg("OCR error: $err")
+                    // Save OCR error to file
+                    try {
+                        val extDir = getExternalFilesDir(null)
+                        if (extDir != null) {
+                            val extFile = File(extDir, "ocr_error.txt")
+                            extFile.appendText("${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date())}: $err\n")
+                        }
+                    } catch (_: Exception) {}
+                    Toast.makeText(this, "OCR 错误: $err", Toast.LENGTH_LONG).show()
+                    findViewById<Button>(R.id.btnOcr).text = "OCR"
+                    pdfOcrMode = false
+                }
+            }
+        )
+        baiduOcr?.start()
+    }
+
+    private fun startPageOcr(pageNum: Int) {
+        val renderer = pdfRenderer ?: return
+        if (pageNum >= renderer.pageCount) {
+            // All pages done
+            runOnUiThread {
+                dbg("OCR complete, total text: ${currentPdfText.length} chars")
+                Toast.makeText(this, "OCR 完成，共 ${currentPdfText.length} 字符", Toast.LENGTH_LONG).show()
+                findViewById<Button>(R.id.btnOcr).text = "OCR 图"
+                // Switch to text view with OCR result
+                if (currentPdfText.isNotEmpty()) {
+                    fullText = currentPdfText
+                    SpeechState.chunks = splitIntoSpeechChunks(currentPdfText)
+                    findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.pdfViewPager).visibility = View.GONE
+                    findViewById<ScrollView>(R.id.scrollContent).visibility = View.VISIBLE
+                    textContent.text = currentPdfText
+                    // Enable TTS buttons for OCR text mode
+                    findViewById<Button>(R.id.btnPlay).visibility = View.VISIBLE
+                    findViewById<Button>(R.id.btnPause).visibility = View.VISIBLE
+                    findViewById<Button>(R.id.btnReplay).visibility = View.VISIBLE
+                    findViewById<Button>(R.id.btnVoice).visibility = View.VISIBLE
+                    findViewById<Button>(R.id.btnPrevChapter).visibility = View.VISIBLE
+                    findViewById<Button>(R.id.btnNextChapter).visibility = View.VISIBLE
+                    findViewById<Button>(R.id.btnJumpTo).visibility = View.VISIBLE
+                }
+            }
+            return
+        }
+        
+        try {
+            val page = renderer.openPage(pageNum)
+            val bitmap = android.graphics.Bitmap.createBitmap(
+                page.width * 2, page.height * 2, android.graphics.Bitmap.Config.ARGB_8888
+            )
+            page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            baiduOcr?.recognizePage(bitmap, pageNum)
+        } catch (e: Exception) {
+            dbg("OCR render page $pageNum failed: ${e.message}")
+            startPageOcr(pageNum + 1) // Skip failed page
+        }
+    }
+
+    private fun setupPagination(text: String) {
+        usePagination = true
+        val viewPager = findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.viewPager)
+        
+        // Calculate pages based on screen size
+        val adapter = PageAdapter(this, text,
+            onPageLoaded = { pageNum ->
+                // Track current page for TTS sync
+                SpeechState.currentIndex = pageNum
+            },
+            onPageClick = { toggleBars() }
+        )
+        pageAdapter = adapter
+        viewPager.adapter = adapter
+        
+        // Show ViewPager, hide old scroll view
+        viewPager.visibility = View.VISIBLE
+        findViewById<ScrollView>(R.id.scrollContent).visibility = View.GONE
+        
+        // Listen for page changes to sync TTS
+        viewPager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                // Update TTS chunk index based on page
+                val charPos = adapter.getCharPositionForPage(position)
+                var chunkIdx = 0
+                var accumulated = 0
+                for (i in chunkCharStarts.indices) {
+                    if (accumulated >= charPos) {
+                        chunkIdx = i
+                        break
+                    }
+                    accumulated += chunkCharStarts.getOrElse(i + 1) { Int.MAX_VALUE } - chunkCharStarts.getOrElse(i) { 0 }
+                }
+                SpeechState.currentIndex = chunkIdx
+            }
+        })
+    }
+
+    private fun renderPdfPages(uri: Uri) {
+        try {
+            dbg("renderPdfPages: $uri")
+            val parcelFileDescriptor = contentResolver.openFileDescriptor(uri, "r") ?: return
+            val renderer = android.graphics.pdf.PdfRenderer(parcelFileDescriptor)
+            pdfRenderer = renderer
+            dbg("PdfRenderer created, pages: ${renderer.pageCount}")
+
+            // Use ViewPager2 for PDF page display with zoom support
+            val viewPager = findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.pdfViewPager)
+            val adapter = PdfPageAdapter(renderer) { /* page click */ }
+            viewPager.adapter = adapter
+
+            // Show PDF view pager, hide other views
+            viewPager.visibility = View.VISIBLE
+            findViewById<ScrollView>(R.id.scrollContent).visibility = View.GONE
+
+            // Show OCR button
+            findViewById<Button>(R.id.btnOcr).visibility = View.VISIBLE
+
+            Toast.makeText(this, "PDF 共 ${renderer.pageCount} 页", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            dbg("renderPdfPages failed: ${e.message}")
+            Toast.makeText(this, "PDF 渲染失败: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
 }

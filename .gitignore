@@ -7,3 +7,5 @@ local.properties
 *.keystore
 app-release-*.apk
 .metadata/
+app/libs/
+app/src/main/assets/

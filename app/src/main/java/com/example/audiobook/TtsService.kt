@@ -6,8 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
 import android.util.Log
@@ -23,15 +23,16 @@ class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUttera
         const val NOTIFICATION_ID = 1001
 
         const val ACTION_LOAD = "com.example.audiobook.LOAD"
-        const val EXTRA_TEXT = "text"
-        const val EXTRA_CHUNK_INDEX = "chunkIndex"
-        const val EXTRA_TOTAL_CHUNKS = "totalChunks"
-
         const val ACTION_PLAY = "com.example.audiobook.PLAY"
         const val ACTION_STOP = "com.example.audiobook.STOP"
         const val ACTION_NEXT_CHUNK = "com.example.audiobook.NEXT_CHUNK"
-        
-        // Broadcast actions
+        const val ACTION_SET_LANGUAGE = "com.example.audiobook.SET_LANGUAGE"
+
+        const val EXTRA_TEXT = "text"
+        const val EXTRA_CHUNK_INDEX = "chunkIndex"
+        const val EXTRA_TOTAL_CHUNKS = "totalChunks"
+        const val EXTRA_LANGUAGE = "language"
+
         const val BROADCAST_UTTERANCE_COMPLETED = "com.example.audiobook.UTTERANCE_COMPLETED"
         const val EXTRA_NEXT_CHUNK_INDEX = "nextChunkIndex"
     }
@@ -42,6 +43,12 @@ class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUttera
     private var currentChunkIndex: Int = 0
     private var totalChunks: Int = 0
     private var isUtteranceCompleted = true
+    private var currentLocale: Locale = Locale.SIMPLIFIED_CHINESE
+    private var isTtsInitialized = false
+
+    inner class LocalBinder : android.os.Binder() {
+        fun getService(): TtsService = this@TtsService
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -55,9 +62,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUttera
                 CHANNEL_ID,
                 "TTS Playback",
                 NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Audio book playback"
-            }
+            ).apply { description = "Audio book playback" }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
@@ -67,46 +72,70 @@ class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUttera
         tts?.setOnUtteranceCompletedListener(this)
     }
 
+    fun setLanguage(language: String?) {
+        currentLocale = when {
+            language == null -> Locale.SIMPLIFIED_CHINESE
+            language.startsWith("zh", ignoreCase = true) ||
+            language.startsWith("chi", ignoreCase = true) ||
+            language.startsWith("cmn", ignoreCase = true) -> Locale.SIMPLIFIED_CHINESE
+            language.startsWith("en", ignoreCase = true) -> Locale.US
+            language.startsWith("ja", ignoreCase = true) -> Locale.JAPANESE
+            language.startsWith("ko", ignoreCase = true) -> Locale.KOREAN
+            else -> Locale.SIMPLIFIED_CHINESE
+        }
+        if (isTtsInitialized) applyLanguage()
+    }
+
+    private fun applyLanguage(): Int {
+        return try {
+            val result = tts?.setLanguage(currentLocale)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.e(TAG, "TTS language not supported: $currentLocale, fallback to zh")
+                tts?.setLanguage(Locale.SIMPLIFIED_CHINESE) ?: TextToSpeech.ERROR
+            } else {
+                result ?: TextToSpeech.ERROR
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error applying language", e)
+            TextToSpeech.ERROR
+        }
+    }
+
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            val result = tts?.setLanguage(Locale.US)
-            if (result == null || result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.e(TAG, "TTS language not supported")
-            }
+            isTtsInitialized = true
+            applyLanguage()
             tts?.setSpeechRate(1.0f)
+            Log.d(TAG, "TTS initialized, locale: $currentLocale")
         } else {
+            isTtsInitialized = false
             Log.e(TAG, "TTS initialization failed")
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            ACTION_SET_LANGUAGE -> setLanguage(intent.getStringExtra(EXTRA_LANGUAGE))
             ACTION_LOAD -> {
                 currentText = intent.getStringExtra(EXTRA_TEXT) ?: ""
                 currentChunkIndex = intent.getIntExtra(EXTRA_CHUNK_INDEX, 0)
                 totalChunks = intent.getIntExtra(EXTRA_TOTAL_CHUNKS, 1)
                 if (isUtteranceCompleted) {
                     startForeground(NOTIFICATION_ID, createNotification())
-                    Log.d(TAG, "Loaded chunk $currentChunkIndex/$totalChunks (${currentText.length} characters)")
+                    Log.d(TAG, "Loaded chunk $currentChunkIndex/$totalChunks (${currentText.length} chars)")
                 }
             }
             ACTION_PLAY -> {
-                if (isUtteranceCompleted && !currentText.isEmpty()) {
-                    startSpeaking()
-                }
+                if (isTtsInitialized && isUtteranceCompleted && currentText.isNotEmpty()) startSpeaking()
             }
             ACTION_STOP -> stopSpeaking()
-            ACTION_NEXT_CHUNK -> {
-                // Signal to load next chunk
-                stopSpeaking()
-                // The MainActivity will handle loading the next chunk
-            }
+            ACTION_NEXT_CHUNK -> stopSpeaking()
         }
         return START_STICKY
     }
 
     fun startSpeaking() {
-        if (currentText.isEmpty()) return
+        if (!isTtsInitialized || currentText.isEmpty()) return
         isUtteranceCompleted = false
         tts?.speak(currentText, TextToSpeech.QUEUE_FLUSH, null, "utterance" + System.currentTimeMillis())
         isPlaying = true
@@ -122,51 +151,36 @@ class TtsService : Service(), TextToSpeech.OnInitListener, TextToSpeech.OnUttera
     override fun onUtteranceCompleted(utteranceId: String?) {
         isUtteranceCompleted = true
         if (isPlaying && currentChunkIndex < totalChunks - 1) {
-            // Auto-advance to next chunk
             val nextIndex = currentChunkIndex + 1
-            Log.d(TAG, "Utterance completed for chunk $currentChunkIndex, advancing to $nextIndex")
-            
-            // Send broadcast to MainActivity to load next chunk
-            val intent = Intent(BROADCAST_UTTERANCE_COMPLETED).apply {
-                putExtra(EXTRA_NEXT_CHUNK_INDEX, nextIndex)
-            }
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-        } else if (isPlaying && currentChunkIndex >= totalChunks - 1) {
-            Log.d(TAG, "Playback completed - reached end of book")
+            LocalBroadcastManager.getInstance(this).sendBroadcast(
+                Intent(BROADCAST_UTTERANCE_COMPLETED).putExtra(EXTRA_NEXT_CHUNK_INDEX, nextIndex)
+            )
+        } else if (isPlaying) {
             isPlaying = false
             updateNotification()
         }
     }
 
     private fun createNotification(): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         val progressText = if (totalChunks > 0) "$currentChunkIndex/$totalChunks" else "0/0"
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("听书阅读器")
             .setContentText("正在播放: $progressText 段落")
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, ReaderActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             .setOngoing(true)
             .setProgress(totalChunks, currentChunkIndex, false)
             .build()
     }
 
     private fun updateNotification() {
-        val notification = createNotification()
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification())
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(intent: Intent?): IBinder = LocalBinder()
 
     override fun onDestroy() {
-        super.onDestroy()
-        tts?.stop()
-        tts?.shutdown()
+        tts?.stop(); tts?.shutdown()
     }
 }

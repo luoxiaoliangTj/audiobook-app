@@ -3,13 +3,11 @@ package com.example.audiobook
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.IOException
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -23,94 +21,82 @@ data class PdfBook(
 object PdfParser {
 
     private var initialized = false
-    private val crashLog = StringBuilder()
+    private val logs = StringBuilder()
 
     fun init(context: Context) {
-        if (!initialized) {
-            try {
-                PDFBoxResourceLoader.init(context)
-                initialized = true
-                log("PDFBoxResourceLoader initialized")
-            } catch (e: Exception) {
-                log("PDFBoxResourceLoader init failed: ${e.message}")
-            }
+        logs.clear()
+        try {
+            PDFBoxResourceLoader.init(context)
+            initialized = true
+            log("PDFBoxResourceLoader init OK")
+        } catch (e: Throwable) {
+            log("PDFBoxResourceLoader init FAILED: ${stackTrace(e)}")
         }
     }
 
-    fun getCrashLog(): String = crashLog.toString()
+    fun getLogs(): String = logs.toString()
 
     private fun log(msg: String) {
-        crashLog.append("[PdfParser] ").append(msg).append("\n")
-        android.util.Log.d("PdfParser", msg)
+        logs.append("[PdfParser] ").append(msg).append("\n")
+        Log.d("PdfParser", msg)
+    }
+
+    private fun stackTrace(e: Throwable): String {
+        val sw = StringWriter()
+        e.printStackTrace(PrintWriter(sw))
+        return sw.toString()
     }
 
     fun parsePdf(context: Context, contentResolver: ContentResolver, uri: Uri): PdfBook? {
         try {
             log("parsePdf: $uri")
             init(context)
-
-            // Step 1: Copy PDF to temp file (more reliable on Android)
-            val tempFile = File(context.cacheDir, "temp_pdf_${System.currentTimeMillis()}.pdf")
-            log("Creating temp file: ${tempFile.absolutePath}")
-
-            try {
-                contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
-                    }
-                } ?: run {
-                    log("Cannot open input stream for URI")
-                    return null
-                }
-                log("Temp file size: ${tempFile.length()} bytes")
-            } catch (e: Exception) {
-                log("Copy to temp failed: ${stackTrace(e)}")
+            if (!initialized) {
+                log("PDFBox NOT initialized, aborting")
                 return null
             }
 
-            // Step 2: Load PDF from temp file
-            log("Loading PDF from temp file...")
+            log("File descriptor opened, loading PDF...")
             val document: PDDocument
             try {
+                // Copy to temp file first (more reliable on Android)
+                val tempFile = File(context.cacheDir, "temp_pdf_${System.currentTimeMillis()}.pdf")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    java.io.FileOutputStream(tempFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                log("Temp file: ${tempFile.absolutePath}, size: ${tempFile.length()}")
                 document = PDDocument.load(tempFile)
-                log("PDF loaded, pages: ${document.numberOfPages}")
-            } catch (e: Exception) {
-                log("PDDocument.load failed: ${stackTrace(e)}")
-                tempFile.delete()
+                log("PDF loaded OK, pages: ${document.numberOfPages}")
+            } catch (e: Throwable) {
+                log("PDDocument.load FAILED: ${stackTrace(e)}")
                 return null
             }
 
-            // Step 3: Handle encrypted PDFs
             if (document.isEncrypted) {
-                log("PDF is encrypted, attempting to remove security...")
+                log("PDF encrypted, trying to remove security...")
                 try {
                     document.setAllSecurityToBeRemoved(true)
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     log("Remove security failed: ${e.message}")
                 }
             }
 
-            // Step 4: Extract text
             var text: String = ""
             try {
                 val stripper = PDFTextStripper()
                 text = stripper.getText(document)
                 log("Text extracted: ${text.length} chars")
-            } catch (e: Exception) {
-                log("Text extraction failed: ${stackTrace(e)}")
-                text = ""
+            } catch (e: Throwable) {
+                log("Text extraction FAILED: ${stackTrace(e)}")
             }
+
 
             val pageCount = document.numberOfPages
+            document.close()
 
-            // Step 5: Close document and cleanup
-            try {
-                document.close()
-                tempFile.delete()
-            } catch (e: Exception) {
-                log("Cleanup failed: ${e.message}")
-            }
-
+            log("Done. pages=$pageCount, text=${text.length}")
             return PdfBook(
                 uri = uri,
                 title = getFileName(contentResolver, uri),
@@ -121,12 +107,6 @@ object PdfParser {
             log("FATAL: ${stackTrace(e)}")
             return null
         }
-    }
-
-    private fun stackTrace(e: Throwable): String {
-        val sw = StringWriter()
-        e.printStackTrace(PrintWriter(sw))
-        return sw.toString()
     }
 
     private fun getFileName(contentResolver: ContentResolver, uri: Uri): String {

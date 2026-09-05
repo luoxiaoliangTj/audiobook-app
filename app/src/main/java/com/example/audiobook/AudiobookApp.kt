@@ -57,7 +57,7 @@ class AudiobookApp : Application() {
                     appendLine(stackTrace)
                     appendLine()
                     appendLine("--- PdfParser Internal Log ---")
-                    appendLine(PdfParser.getCrashLog())
+                    appendLine(PdfParser.getLogs())
                     appendLine("===== END CRASH LOG =====")
                     appendLine()
                 }

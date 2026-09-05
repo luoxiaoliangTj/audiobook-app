@@ -1,106 +1,114 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
+<FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:background="#1A1A1A">
 
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="听书阅读器"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:gravity="center"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+    <!-- Main content area (fills entire screen) -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/tvFileName"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="未选择文件"
-        android:textSize="14sp"
-        android:textColor="#666666"
-        android:ellipsize="middle"
-        android:maxLines="1"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+    <!-- Legacy scroll view (kept for backward compatibility) -->
+    <ScrollView android:id="@+id/scrollContent" android:layout_width="match_parent"
+        android:layout_height="match_parent" android:fillViewport="true"
+        android:visibility="gone">
 
-    <ProgressBar
-        android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="0dp"
-        android:layout_height="4dp"
-        android:layout_marginTop="16dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/tvFileName"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        <TextView android:id="@+id/textContent" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:padding="24dp"
+            android:textSize="18sp" android:lineSpacingMultiplier="1.8"
+            android:textIsSelectable="true" android:typeface="serif" />
 
-    <TextView
-        android:id="@+id/tvProgress"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="0/0 段落"
-        android:textSize="12sp"
-        android:textColor="#999999"
-        android:gravity="center"
-        app:layout_constraintTop_toBottomOf="@id/progressBar"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+    </ScrollView>
 
-    <Button
-        android:id="@+id/btnSelectFile"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="选择文本文件"
-        app:layout_constraintTop_toBottomOf="@id/tvProgress"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+    <!-- Debug panel -->
+    <EditText android:id="@+id/debugPanel" android:layout_width="match_parent"
+        android:layout_height="match_parent" android:visibility="gone"
+        android:gravity="top|start" android:background="#2D2D2D"
+        android:textColor="#CCC" android:textSize="11sp"
+        android:fontFamily="monospace" android:focusable="true"
+        android:inputType="textNoSuggestions" android:cursorVisible="false"
+        android:longClickable="true" android:scrollbars="vertical" />
 
-    <LinearLayout
-        android:id="@+id/controlLayout"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/btnSelectFile"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+    <!-- PDF Page Display (for image-based PDFs) -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/pdfViewPager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
 
-        <Button
-            android:id="@+id/btnPlay"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="播放"
-            android:layout_marginEnd="8dp" />
+    <!-- Floating OCR Button -->
+    <Button android:id="@+id/btnOcr" android:layout_width="56dp"
+        android:layout_height="56dp" android:layout_gravity="bottom|end"
+        android:layout_margin="16dp" android:text="OCR"
+        android:textSize="12sp" android:minHeight="56dp"
+        android:background="@android:drawable/dialog_holo_light_frame"
+        android:visibility="gone" />
 
-        <Button
-            android:id="@+id/btnPause"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="停止"
-            android:layout_marginStart="8dp" />
+    <!-- Top toolbar (overlay) -->
+    <LinearLayout android:id="@+id/topBar" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:orientation="horizontal"
+        android:background="#2D2D2D" android:padding="4dp"
+        android:layout_gravity="top"
+        android:visibility="gone">
 
-        <Button
-            android:id="@+id/btnReplay"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="重播"
-            android:layout_marginStart="8dp" />
+        <Button android:id="@+id/btnBookshelf" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="书架" android:textSize="12sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnSelectFile" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="文件" android:textSize="12sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnVoice" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="声音" android:textSize="12sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnTheme" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="主题" android:textSize="12sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnMore" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="更多 ▾" android:textSize="12sp" android:minHeight="36dp" />
+
     </LinearLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <!-- Bottom control bar (overlay) -->
+    <LinearLayout android:id="@+id/bottomBar" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:orientation="horizontal"
+        android:background="#2D2D2D" android:padding="4dp"
+        android:layout_gravity="bottom"
+        android:visibility="gone">
+
+        <Button android:id="@+id/btnPrevChapter" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="◀" android:textSize="14sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnJumpTo" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="跳转" android:textSize="12sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnPlay" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="▶" android:textSize="14sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnPause" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="⏸" android:textSize="14sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnReplay" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="⏮" android:textSize="14sp" android:minHeight="36dp" />
+
+        <Button android:id="@+id/btnNextChapter" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="▶|" android:textSize="14sp" android:minHeight="36dp" />
+
+    </LinearLayout>
+
+</FrameLayout>
+
