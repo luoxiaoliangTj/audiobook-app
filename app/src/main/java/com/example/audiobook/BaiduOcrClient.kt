@@ -7,129 +7,124 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
+/**
+ * Baidu OCR client for text recognition from images.
+ * API keys are loaded from BuildConfig (set via local.properties).
+ */
 class BaiduOcrClient(
-    private val context: android.content.Context,
-    private val onProgress: (String) -> Unit,
-    private val onResult: (String) -> Unit,
-    private val onError: (String) -> Unit
+    private val apiKey: String = BuildConfig.BAIDU_OCR_API_KEY,
+    private val secretKey: String = BuildConfig.BAIDU_OCR_SECRET_KEY
 ) {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .build()
-
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val client = OkHttpClient()
     private var accessToken: String? = null
-
-    companion object {
-        private const val API_KEY = "o0a5JjKCo9NvZPTpmg6pNd5b"
-        private const val SECRET_KEY = "8lBFvkjBOytX0oxD8trFMXmhEOcQwCDh"
-        private const val TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token"
-        private const val OCR_URL = "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic"
-    }
-
-    fun start() {
-        scope.launch {
-            try {
-                onProgress("获取百度访问令牌...")
-                val token = getAccessToken()
-                if (token == null) {
-                    onError("获取访问令牌失败")
-                } else {
-                    accessToken = token
-                    onProgress("令牌获取成功，准备识别...")
-                    onResult("READY")
-                }
-            } catch (e: Exception) {
-                onError("初始化失败: ${e.message}")
-            }
-        }
-    }
-
-    fun recognizePage(bitmap: Bitmap, pageNum: Int) {
-        val currentToken = accessToken
-        if (currentToken == null) {
-            onError("未获取访问令牌")
-            return
-        }
-        scope.launch {
-            try {
-                onProgress("识别第 $pageNum 页...")
-                val result = callOcr(bitmap, currentToken)
-                onResult("PAGE:$pageNum:$result")
-            } catch (e: Exception) {
-                onError("第 $pageNum 页识别失败: ${e.message}")
-            }
-        }
-    }
+    private var isCancelled = false
 
     fun cancel() {
-        scope.cancel()
+        isCancelled = true
+    }
+
+    interface OcrCallback {
+        fun onProgress(pageNum: Int, totalPages: Int)
+        fun onPageResult(pageNum: Int, text: String)
+        fun onComplete(totalText: String)
+        fun onError(error: String)
+    }
+
+    suspend fun recognizePages(bitmaps: List<Bitmap>, callback: OcrCallback) {
+        isCancelled = false
+        val totalPages = bitmaps.size
+        val allText = StringBuilder()
+
+        try {
+            // Get access token
+            withContext(Dispatchers.Main) { callback.onProgress(0, totalPages) }
+            val token = getAccessToken()
+            if (token == null) {
+                withContext(Dispatchers.Main) { callback.onError("获取百度访问令牌失败") }
+                return
+            }
+
+            for (i in bitmaps.indices) {
+                if (isCancelled) break
+
+                withContext(Dispatchers.Main) { callback.onProgress(i + 1, totalPages) }
+
+                val bitmap = bitmaps[i]
+                val base64 = bitmap.toBase64()
+                val text = recognizeText(token, base64)
+
+                if (text != null) {
+                    allText.append("\n\n--- 第 ${i + 1} 页 ---\n")
+                    allText.append(text)
+                    withContext(Dispatchers.Main) { callback.onPageResult(i + 1, text) }
+                } else {
+                    withContext(Dispatchers.Main) { callback.onError("第 ${i + 1} 页识别失败") }
+                }
+
+                // Rate limit: max 10 requests per second
+                delay(150)
+            }
+
+            withContext(Dispatchers.Main) { callback.onComplete(allText.toString()) }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) { callback.onError("OCR 错误: ${e.message}") }
+        }
     }
 
     private suspend fun getAccessToken(): String? = withContext(Dispatchers.IO) {
-        val formBody = FormBody.Builder()
-            .add("grant_type", "client_credentials")
-            .add("client_id", API_KEY)
-            .add("client_secret", SECRET_KEY)
-            .build()
+        try {
+            val body = FormBody.Builder()
+                .add("grant_type", "client_credentials")
+                .add("client_id", apiKey)
+                .add("client_secret", secretKey)
+                .build()
 
-        val request = Request.Builder()
-            .url(TOKEN_URL)
-            .post(formBody)
-            .build()
+            val request = Request.Builder()
+                .url("https://aip.baidubce.com/oauth/2.0/token")
+                .post(body)
+                .build()
 
-        val response = client.newCall(request).execute()
-        val body = response.body?.string() ?: return@withContext null
-        val json = JSONObject(body)
-        if (json.has("access_token")) {
-            json.getString("access_token")
-        } else {
+            val response = client.newCall(request).execute()
+            val json = JSONObject(response.body?.string() ?: return@withContext null)
+            accessToken = json.optString("access_token")
+            accessToken
+        } catch (e: Exception) {
             null
         }
     }
 
-    private suspend fun callOcr(bitmap: Bitmap, token: String): String = withContext(Dispatchers.IO) {
-        val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
-        val imageBytes = stream.toByteArray()
-        val imageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+    private suspend fun recognizeText(token: String, imageBase64: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val body = FormBody.Builder()
+                .add("image", imageBase64)
+                .add("language_type", "CHN_ENG")
+                .build()
 
-        val formBody = FormBody.Builder()
-            .add("image", imageBase64)
-            .add("language_type", "CHN_ENG")
-            .add("detect_direction", "true")
-            .add("paragraph", "true")
-            .build()
+            val request = Request.Builder()
+                .url("https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic?access_token=$token")
+                .post(body)
+                .build()
 
-        val request = Request.Builder()
-            .url("$OCR_URL?access_token=$token")
-            .post(formBody)
-            .build()
+            val response = client.newCall(request).execute()
+            val json = JSONObject(response.body?.string() ?: return@withContext null)
+            val wordsResult = json.optJSONArray("words_result") ?: return@withContext null
 
-        val response = client.newCall(request).execute()
-        val body = response.body?.string() ?: throw IOException("Empty response")
-        val json = JSONObject(body)
-
-        if (json.has("error_code")) {
-            throw Exception("OCR API error: ${json.getString("error_msg")}")
-        }
-
-        val wordsResult = json.optJSONArray("words_result") ?: return@withContext ""
-        val sb = StringBuilder()
-        for (i in 0 until wordsResult.length()) {
-            val item = wordsResult.getJSONObject(i)
-            sb.append(item.getString("words"))
-            if (item.optBoolean("is_paragraph_end", false)) {
-                sb.append("\n\n")
-            } else {
+            val sb = StringBuilder()
+            for (i in 0 until wordsResult.length()) {
+                sb.append(wordsResult.getJSONObject(i).optString("words"))
                 sb.append("\n")
             }
+            sb.toString().trim()
+        } catch (e: Exception) {
+            null
         }
-        sb.toString()
+    }
+
+    private fun Bitmap.toBase64(): String {
+        val bos = java.io.ByteArrayOutputStream()
+        compress(Bitmap.CompressFormat.JPEG, 80, bos)
+        val bytes = bos.toByteArray()
+        return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 }

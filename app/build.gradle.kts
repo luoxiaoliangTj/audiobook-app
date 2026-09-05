@@ -16,6 +16,15 @@ android {
         versionCode = 100
         versionName = "1.3.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Read Baidu OCR keys from local.properties (not committed to git)
+        val localProps = java.util.Properties()
+        val localPropsFile = rootProject.file("local.properties")
+        if (localPropsFile.exists()) {
+            localPropsFile.inputStream().use { localProps.load(it) }
+        }
+        buildConfigField("String", "BAIDU_OCR_API_KEY", "\"${localProps.getProperty("BAIDU_OCR_API_KEY", "")}\"")
+        buildConfigField("String", "BAIDU_OCR_SECRET_KEY", "\"${localProps.getProperty("BAIDU_OCR_SECRET_KEY", "")}\"")
     }
 
     buildTypes {
