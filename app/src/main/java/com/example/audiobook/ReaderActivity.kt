@@ -877,7 +877,7 @@ class ReaderActivity : AppCompatActivity() {
             if (j < text.length) j++
             val sentence = text.substring(i, j)
             if (sentence.isNotBlank()) {
-                if (currentChunk.length + sentence.length <= 200) {
+                if (currentChunk.length + sentence.length <= 100) {
                     if (currentChunk.isEmpty()) {
                         chunkStartPos = i
                     }
@@ -889,17 +889,17 @@ class ReaderActivity : AppCompatActivity() {
                         chunks.add(currentChunk.toString())
                         currentChunk = StringBuilder()
                     }
-                    if (sentence.length <= 200) {
+                    if (sentence.length <= 100) {
                         currentChunk.append(sentence)
                         chunkStartPos = i
                     } else {
                         var k = 0
                         while (k < sentence.length) {
-                            val part = sentence.substring(k, minOf(k + 200, sentence.length))
+                            val part = sentence.substring(k, minOf(k + 100, sentence.length))
                             chunkCharStarts.add(i + k)
                             chunkCharEnds.add(i + k + part.length)
                             chunks.add(part)
-                            k += 200
+                            k += 100
                         }
                     }
                 }
