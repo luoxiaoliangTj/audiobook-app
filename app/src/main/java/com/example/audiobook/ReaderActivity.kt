@@ -3,6 +3,8 @@ package com.example.audiobook
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.Drawable
@@ -993,55 +995,9 @@ class ReaderActivity : AppCompatActivity() {
         pdfOcrMode = true
         findViewById<Button>(R.id.btnOcr).text = "识别中..."
         
-        // Initialize OCR client
-        baiduOcr = BaiduOcrClient(
-            context = this,
-            onProgress = { msg ->
-                runOnUiThread {
-                    findViewById<Button>(R.id.btnOcr).text = msg
-                }
-            },
-            onResult = { result ->
-                runOnUiThread {
-                    if (result == "READY") {
-                        // Start recognizing pages
-                        startPageOcr(0)
-                    } else if (result.startsWith("PAGE:")) {
-                        val parts = result.split(":", limit = 3)
-                        if (parts.size == 3) {
-                            val pageNum = parts[1].toIntOrNull() ?: 0
-                            val text = parts[2]
-                            dbg("OCR page $pageNum: ${text.length} chars")
-                            // Append to currentPdfText
-                            currentPdfText = if (currentPdfText.isEmpty()) {
-                                text
-                            } else {
-                                currentPdfText + "\n\n--- 第 $pageNum 页 ---\n" + text
-                            }
-                            // Continue with next page
-                            startPageOcr(pageNum + 1)
-                        }
-                    }
-                }
-            },
-            onError = { err ->
-                runOnUiThread {
-                    dbg("OCR error: $err")
-                    // Save OCR error to file
-                    try {
-                        val extDir = getExternalFilesDir(null)
-                        if (extDir != null) {
-                            val extFile = File(extDir, "ocr_error.txt")
-                            extFile.appendText("${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date())}: $err\n")
-                        }
-                    } catch (_: Exception) {}
-                    Toast.makeText(this, "OCR 错误: $err", Toast.LENGTH_LONG).show()
-                    findViewById<Button>(R.id.btnOcr).text = "OCR"
-                    pdfOcrMode = false
-                }
-            }
-        )
-        baiduOcr?.start()
+        // Initialize OCR client (recognizePages is invoked per-page in startPageOcr)
+        baiduOcr = BaiduOcrClient()
+        startPageOcr(0)
     }
 
     private fun startPageOcr(pageNum: Int) {
@@ -1079,7 +1035,28 @@ class ReaderActivity : AppCompatActivity() {
             )
             page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             page.close()
-            baiduOcr?.recognizePage(bitmap, pageNum)
+            lifecycleScope.launch {
+                try {
+                    baiduOcr?.recognizePages(listOf(bitmap), object : BaiduOcrClient.OcrCallback {
+                        override fun onProgress(p: Int, total: Int) {}
+                        override fun onPageResult(p: Int, text: String) {
+                            dbg("OCR page $p ok (${text.length} chars)")
+                            // Append and continue with next page
+                            currentPdfText = if (currentPdfText.isEmpty()) text
+                                else currentPdfText + "\n\n--- 第 $p 页 ---\n" + text
+                            startPageOcr(p) // p is 1-based page index just processed; next = p
+                        }
+                        override fun onComplete(totalText: String) {}
+                        override fun onError(error: String) {
+                            dbg("OCR page failed: $error")
+                            startPageOcr(pageNum + 1) // Skip failed page
+                        }
+                    })
+                } catch (e: Exception) {
+                    dbg("OCR launch failed: ${e.message}")
+                    startPageOcr(pageNum + 1)
+                }
+            }
         } catch (e: Exception) {
             dbg("OCR render page $pageNum failed: ${e.message}")
             startPageOcr(pageNum + 1) // Skip failed page
