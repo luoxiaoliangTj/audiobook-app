@@ -1,9 +1,6 @@
-// CI (GitHub Actions) 用官方仓库；本地 Termux 用 aliyun 镜像优先
-val isCi = !System.getenv("CI").isNullOrEmpty()
-
 pluginManagement {
     repositories {
-        if (isCi) {
+        if (System.getenv("CI") != null) {
             google()
             mavenCentral()
             gradlePluginPortal()
@@ -20,7 +17,7 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        if (isCi) {
+        if (System.getenv("CI") != null) {
             google()
             mavenCentral()
             maven("https://jitpack.io")  // For EPUB library
