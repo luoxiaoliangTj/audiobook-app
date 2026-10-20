@@ -3,6 +3,7 @@ build/
 app/build/
 *.iml
 local.properties
+gradle.properties
 *.jks
 *.keystore
 app-release-*.apk
