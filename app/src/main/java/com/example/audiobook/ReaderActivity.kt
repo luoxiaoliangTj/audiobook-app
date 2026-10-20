@@ -948,12 +948,13 @@ class ReaderActivity : AppCompatActivity() {
 
     private fun showVoiceMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
-        EdgeTtsClient.VOICES.forEachIndexed { i, (voice, label) ->
+        val voices = if (EdgeTtsClient.engine == "nvidia") EdgeTtsClient.VOICES else EdgeTtsClient.GOOGLE_VOICES
+        voices.forEachIndexed { i, (voice, label) ->
             popup.menu.add(0, i, i, "$label${if (voice == edgeTts.voice) " ✓" else ""}")
         }
         popup.setOnMenuItemClickListener { item ->
-            edgeTts.voice = EdgeTtsClient.VOICES[item.itemId].first
-            dbg("切换语音: ${EdgeTtsClient.VOICES[item.itemId].first}")
+            edgeTts.voice = voices[item.itemId].first
+            dbg("切换语音: ${voices[item.itemId].first}")
             true
         }
         popup.show()

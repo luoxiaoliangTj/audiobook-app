@@ -17,7 +17,20 @@ import java.util.concurrent.atomic.AtomicInteger
 class EdgeTtsClient(private val context: Context, private val dbg: (String) -> Unit) {
 
     companion object {
+        // TTS 引擎类型: "google" (旧版) / "nvidia" (NVIDIA TTS NIM 远端)
+        var engine = "nvidia"
+        // NVIDIA TTS NIM 服务器地址（局域网部署），可被设置页覆盖
+        var nvidiaBaseUrl = "http://192.168.2.116:9000"
+        // NVIDIA Magpie-Multilingual 声音（zh-CN 支持）
         val VOICES = listOf(
+            "Magpie-Multilingual.ZH-CN.Xue" to "雪(女,普通话)",
+            "Magpie-Multilingual.ZH-CN.Liang" to "亮(男,普通话)",
+            "Magpie-Multilingual.ZH-CN.Xin" to "欣(女,普通话)",
+            "Magpie-Multilingual.ZH-CN.Han" to "涵(男,普通话)",
+            "Magpie-Multilingual.EN-US.Aria" to "Aria(女,英文)"
+        )
+        // 保留旧 Google 备用声音列表
+        val GOOGLE_VOICES = listOf(
             "zh-CN-XiaoxiaoNeural" to "晓晓(女)",
             "zh-CN-YunxiNeural" to "云希(男)",
             "zh-CN-YunjianNeural" to "云健(男)",
@@ -39,7 +52,7 @@ class EdgeTtsClient(private val context: Context, private val dbg: (String) -> U
     private val playQueue = LinkedBlockingQueue<QueueItem>()
     private val currentChunkIndex = AtomicInteger(0)
 
-    var voice = "zh-CN-XiaoxiaoNeural"
+    var voice = "Magpie-Multilingual.ZH-CN.Xue"
     var rate = "+0%"
 
     data class QueueItem(val filePath: String, val globalChunkIndex: Int)
@@ -68,19 +81,29 @@ class EdgeTtsClient(private val context: Context, private val dbg: (String) -> U
                     }
 
                     dbg("TTS: 合成 (${text.length} 字符) [global=$globalIdx]")
-                    val mp3 = tryGoogleTts(text)
-                    if (mp3.isEmpty()) {
+                    val (audio, ext) = when (engine) {
+                        "nvidia" -> {
+                            val wav = tryNvidiaTts(text)
+                            if (wav.isEmpty()) {
+                                // NVIDIA 失败时回退到 Google
+                                val g = tryGoogleTts(text)
+                                if (g.isEmpty()) byteArrayOf() to "mp3" else g to "mp3"
+                            } else wav to "wav"
+                        }
+                        else -> tryGoogleTts(text) to "mp3"
+                    }
+                    if (audio.isEmpty()) {
                         dbg("TTS: 合成失败")
                         dbg("滚动到 chunk $globalIdx")
                         currentChunkIndex.set(globalIdx)
                         mainHandler.post { onChunkPlayed(globalIdx) }
                         continue
                     }
-                    dbg("TTS: Google 音频 ${mp3.size} bytes")
+                    dbg("TTS: 音频 ${audio.size} bytes (${ext})")
 
-                    val tmp = File.createTempFile("tts_", ".mp3", context.cacheDir)
-                    tmp.writeBytes(mp3)
-                    dbg("TTS: MP3 ${tmp.absolutePath}")
+                    val tmp = File.createTempFile("tts_", ".$ext", context.cacheDir)
+                    tmp.writeBytes(audio)
+                    dbg("TTS: $ext ${tmp.absolutePath}")
 
                     playQueue.put(QueueItem(tmp.absolutePath, globalIdx))
 
@@ -236,6 +259,53 @@ class EdgeTtsClient(private val context: Context, private val dbg: (String) -> U
             if (attempt < 2) Thread.sleep(500)
         }
         dbg("Google: 3次重试后仍然失败")
+        return byteArrayOf()
+    }
+
+    /**
+     * NVIDIA TTS NIM HTTP REST 合成
+     * POST {base}/v1/audio/synthesize  (multipart/form-data)
+     * 参数: text, language, voice, sample_rate_hz
+     * 返回: audio/wav (16-bit mono, 默认 22050 Hz)
+     */
+    private fun tryNvidiaTts(text: String): ByteArray {
+        repeat(3) { attempt ->
+            try {
+                val language = if (voice.startsWith("Magpie-Multilingual.EN")) "en-US" else "zh-CN"
+                val body = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("text", text)
+                    .addFormDataPart("language", language)
+                    .addFormDataPart("voice", voice)
+                    .addFormDataPart("sample_rate_hz", "22050")
+                    .build()
+                val req = Request.Builder()
+                    .url("$nvidiaBaseUrl/v1/audio/synthesize")
+                    .post(body)
+                    .build()
+                val resp = client.newBuilder()
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(120, TimeUnit.SECONDS)
+                    .build()
+                    .newCall(req).execute()
+                if (resp.isSuccessful) {
+                    val bytes = resp.body?.bytes() ?: byteArrayOf()
+                    // WAV 校验: "RIFF" 头
+                    if (bytes.size > 12 && String(bytes.sliceArray(0..3), Charsets.US_ASCII) == "RIFF") {
+                        return bytes
+                    } else {
+                        dbg("NVIDIA: 非WAV数据, size=${bytes.size}, attempt=$attempt")
+                    }
+                } else {
+                    val err = resp.body?.string()?.take(200) ?: ""
+                    dbg("NVIDIA: HTTP ${resp.code} $err, attempt=$attempt")
+                }
+            } catch (e: Exception) {
+                dbg("NVIDIA: ${e.message}, attempt=$attempt")
+            }
+            if (attempt < 2) Thread.sleep(500)
+        }
+        dbg("NVIDIA: 3次重试后仍然失败")
         return byteArrayOf()
     }
 }
