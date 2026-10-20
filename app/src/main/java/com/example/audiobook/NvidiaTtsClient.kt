@@ -29,7 +29,7 @@ class NvidiaTtsClient(private val context: Context, private val dbg: (String) ->
 
     companion object {
         // NVIDIA NIM 托管 TTS 端点（与 Hermes providers.nvidia.base_url 同源）
-        const val BASE_URL = "https://ai.api.nvidia.com/v1/grpc/tts.nvcf.nvidia.com/tts"
+        const val BASE_URL = "https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com"
 
         // 预设音色（Magpie-Multilingual，zh-CN 官方名单）
         val VOICES = listOf(
@@ -214,12 +214,12 @@ class NvidiaTtsClient(private val context: Context, private val dbg: (String) ->
     fun getCurrentChunkIndex(): Int = currentChunkIndex.get()
 
     /**
-     * 调用 NVIDIA NIM 托管 TTS。
-     * 端点（REST 网关，POST multipart）：
-     *   https://ai.api.nvidia.com/v1/grpc/tts.nvcf.nvidia.com/tts
-     * 鉴权：Authorization: Bearer $NVAPI_KEY（与 Hermes providers.nvidia 同一个 key）
-     * 参数：language, text, voice, [audio_prompt]
-     * 返回：audio/wav
+     * 调用 NVIDIA NIM 托管 TTS（Magpie-Multilingual）。
+     * 端点（NVCF invocation，POST multipart）——已实测验证：
+     *   https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/v1/audio/synthesize
+     * 鉴权：Authorization: Bearer <nvapi key>
+     * 参数：text, language, voice, sample_rate_hz
+     * 返回：audio/wav (RIFF)
      */
     private fun tryNvidiaTts(text: String): ByteArray {
         val apiKey = BuildConfig.NVIDIA_API_KEY
@@ -247,7 +247,7 @@ class NvidiaTtsClient(private val context: Context, private val dbg: (String) ->
                 }
 
                 val req = Request.Builder()
-                    .url("https://ai.api.nvidia.com/v1/grpc/tts.nvcf.nvidia.com/tts")
+                    .url("https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/v1/audio/synthesize")
                     .addHeader("Authorization", "Bearer $apiKey")
                     .addHeader("accept", "audio/wav")
                     .post(bodyBuilder.build())
