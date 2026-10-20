@@ -21,13 +21,17 @@ class EdgeTtsClient(private val context: Context, private val dbg: (String) -> U
         var engine = "nvidia"
         // NVIDIA TTS NIM 服务器地址（局域网部署），可被设置页覆盖
         var nvidiaBaseUrl = "http://192.168.2.116:9000"
-        // NVIDIA Magpie-Multilingual 声音（zh-CN 支持）
+        // NVIDIA Magpie-Multilingual 声音（zh-CN 官方支持名单，来自 TTS support matrix）
         val VOICES = listOf(
-            "Magpie-Multilingual.ZH-CN.Xue" to "雪(女,普通话)",
-            "Magpie-Multilingual.ZH-CN.Liang" to "亮(男,普通话)",
-            "Magpie-Multilingual.ZH-CN.Xin" to "欣(女,普通话)",
-            "Magpie-Multilingual.ZH-CN.Han" to "涵(男,普通话)",
-            "Magpie-Multilingual.EN-US.Aria" to "Aria(女,英文)"
+            "Magpie-Multilingual.ZH-CN.HouZhen" to "HouZhen(中文)",
+            "Magpie-Multilingual.ZH-CN.Siwei" to "Siwei(中文)",
+            "Magpie-Multilingual.ZH-CN.Diego" to "Diego(中文)",
+            "Magpie-Multilingual.ZH-CN.Pascal" to "Pascal(中文)",
+            "Magpie-Multilingual.ZH-CN.Long" to "Long(中文)",
+            "Magpie-Multilingual.ZH-CN.Jason" to "Jason(中文)",
+            "Magpie-Multilingual.ZH-CN.Isabela" to "Isabela(中文)",
+            "Magpie-Multilingual.ZH-CN.Louise" to "Louise(中文)",
+            "Magpie-Multilingual.EN-US.Aria" to "Aria(英文)"
         )
         // 保留旧 Google 备用声音列表
         val GOOGLE_VOICES = listOf(
@@ -52,7 +56,7 @@ class EdgeTtsClient(private val context: Context, private val dbg: (String) -> U
     private val playQueue = LinkedBlockingQueue<QueueItem>()
     private val currentChunkIndex = AtomicInteger(0)
 
-    var voice = "Magpie-Multilingual.ZH-CN.Xue"
+    var voice = "Magpie-Multilingual.ZH-CN.HouZhen"
     var rate = "+0%"
 
     data class QueueItem(val filePath: String, val globalChunkIndex: Int)
