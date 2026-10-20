@@ -27,6 +27,8 @@ android {
         }
         buildConfigField("String", "BAIDU_OCR_API_KEY", "\"${localProps.getProperty("BAIDU_OCR_API_KEY", "")}\"")
         buildConfigField("String", "BAIDU_OCR_SECRET_KEY", "\"${localProps.getProperty("BAIDU_OCR_SECRET_KEY", "")}\"")
+        // NVIDIA TTS API key (not committed to git)
+        buildConfigField("String", "NVIDIA_API_KEY", "\"${localProps.getProperty("NVIDIA_API_KEY", "")}\"")
     }
 
     buildTypes {

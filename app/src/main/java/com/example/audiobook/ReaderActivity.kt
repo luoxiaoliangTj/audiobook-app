@@ -31,7 +31,7 @@ import java.io.File
 
 class ReaderActivity : AppCompatActivity() {
 
-    private lateinit var edgeTts: EdgeTtsClient
+    private lateinit var tts: NvidiaTtsClient
     private val debugLog = StringBuilder()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -65,7 +65,7 @@ class ReaderActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        edgeTts = EdgeTtsClient(this) { msg -> dbg(msg) }
+        tts = NvidiaTtsClient(this) { msg -> dbg(msg) }
         NoteManager.init(this)
         PdfParser.init(this)
 
@@ -249,7 +249,7 @@ class ReaderActivity : AppCompatActivity() {
                             val chunksToPlay = mutableListOf(trimmedFirst)
                             chunksToPlay.addAll(SpeechState.chunks.drop(startIdx + 1))
                             dbg("从选中位置朗读: start=$start, startIdx=$startIdx, offsetInChunk=$offsetInChunk, 后续${chunksToPlay.size}段")
-                            edgeTts.startPlayback(chunks = chunksToPlay, startOffset = startIdx,
+                            tts.startPlayback(chunks = chunksToPlay, startOffset = startIdx,
                                 onChunkPlayed = { i -> runOnUiThread { SpeechState.currentIndex = i; scrollToChunk(i); updateProgressUI() }},
                                 onComplete = { SpeechState.isPlaying = false; updatePlayPauseButtons() })
                         }
@@ -386,21 +386,21 @@ class ReaderActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnPlay).setOnClickListener {
             if (SpeechState.chunks.isEmpty()) { Toast.makeText(this, "无可播放内容", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-            if (!edgeTts.isCurrentlyPlaying()) {
+            if (!tts.isCurrentlyPlaying()) {
                 SpeechState.isPlaying = true
                 if (SpeechState.currentIndex !in 0 until SpeechState.chunks.size) SpeechState.currentIndex = 0
                 updatePlayPauseButtons()
                 dbg("播放: idx=${SpeechState.currentIndex}")
                 val startIdx = SpeechState.currentIndex
                 val chunksToPlay = SpeechState.chunks.drop(startIdx)
-                edgeTts.startPlayback(chunks = chunksToPlay, startOffset = startIdx,
+                tts.startPlayback(chunks = chunksToPlay, startOffset = startIdx,
                     onChunkPlayed = { i -> runOnUiThread { SpeechState.currentIndex = i; scrollToChunk(i); updateProgressUI() }},
                     onComplete = { SpeechState.isPlaying = false; updatePlayPauseButtons(); dbg("全部播放完成") })
             }
         }
 
         findViewById<Button>(R.id.btnPause).setOnClickListener {
-            edgeTts.stopPlayback()
+            tts.stopPlayback()
             SpeechState.isPlaying = false
             updatePlayPauseButtons()
         }
@@ -408,7 +408,7 @@ class ReaderActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnReplay).setOnClickListener {
             if (SpeechState.chunks.isEmpty()) { Toast.makeText(this, "无可播放内容", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
             SpeechState.currentIndex = 0; SpeechState.isPlaying = true; updatePlayPauseButtons()
-            edgeTts.startPlayback(chunks = SpeechState.chunks, startOffset = 0,
+            tts.startPlayback(chunks = SpeechState.chunks, startOffset = 0,
                 onChunkPlayed = { i -> runOnUiThread { SpeechState.currentIndex = i; scrollToChunk(i); updateProgressUI() }},
                 onComplete = { SpeechState.isPlaying = false; updatePlayPauseButtons(); dbg("全部播放完成") })
         }
@@ -932,7 +932,7 @@ class ReaderActivity : AppCompatActivity() {
                 updateProgressUI()
                 dbg("跳转到: idx=$idx")
                 val chunksToPlay = SpeechState.chunks.drop(idx)
-                edgeTts.startPlayback(chunks = chunksToPlay, startOffset = idx,
+                tts.startPlayback(chunks = chunksToPlay, startOffset = idx,
                     onChunkPlayed = { i -> runOnUiThread { SpeechState.currentIndex = i; scrollToChunk(i); updateProgressUI() }},
                     onComplete = { SpeechState.isPlaying = false; updatePlayPauseButtons(); dbg("全部播放完成") })
                 dialog.dismiss()
@@ -948,13 +948,12 @@ class ReaderActivity : AppCompatActivity() {
 
     private fun showVoiceMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
-        val voices = if (EdgeTtsClient.engine == "nvidia") EdgeTtsClient.VOICES else EdgeTtsClient.GOOGLE_VOICES
-        voices.forEachIndexed { i, (voice, label) ->
-            popup.menu.add(0, i, i, "$label${if (voice == edgeTts.voice) " ✓" else ""}")
+        NvidiaTtsClient.VOICES.forEachIndexed { i, (voice, label) ->
+            popup.menu.add(0, i, i, "$label${if (voice == tts.voice) " ✓" else ""}")
         }
         popup.setOnMenuItemClickListener { item ->
-            edgeTts.voice = voices[item.itemId].first
-            dbg("切换语音: ${voices[item.itemId].first}")
+            tts.voice = NvidiaTtsClient.VOICES[item.itemId].first
+            dbg("切换语音: ${NvidiaTtsClient.VOICES[item.itemId].first}")
             true
         }
         popup.show()
